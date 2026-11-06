@@ -1,0 +1,149 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ScopeType {
+  FEDERATION
+  STATE
+  MUNICIPALITY
+  TOURNAMENT
+
+  @@map("scope_type")
+}
+
+enum PlayerStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+
+  @@map("player_status")
+}
+
+enum AccessEvent {
+  REGISTER
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  ACCOUNT_LOCKED
+  REFRESH
+  REFRESH_REUSE
+  LOGOUT
+
+  @@map("access_event")
+}
+
+model User {
+  id                  String    @id @default(uuid(7)) @db.Uuid
+  email               String    @unique
+  passwordHash        String    @map("password_hash")
+  fullName            String?   @map("full_name")
+  isActive            Boolean   @default(true) @map("is_active")
+  failedLoginAttempts Int       @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime? @map("locked_until") @db.Timestamptz(3)
+  passwordChangedAt   DateTime? @map("password_changed_at") @db.Timestamptz(3)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  roles      UserRole[]
+  sessions   Session[]
+  accessLogs AccessLog[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  code        String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  users UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  roleId       String    @map("role_id") @db.Uuid
+  scopeType    ScopeType @map("scope_type")
+  scopeId      String?   @map("scope_id") @db.Uuid
+  note         String?
+  assignedById String?   @map("assigned_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@index([userId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+model Session {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  refreshTokenHash String    @map("refresh_token_hash")
+  ipAddress        String?   @map("ip_address")
+  userAgent        String?   @map("user_agent")
+  device           String?
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  absoluteExpiresAt DateTime @map("absolute_expires_at") @db.Timestamptz(3)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+  revokedReason    String?   @map("revoked_reason")
+  lastUsedAt       DateTime  @default(now()) @map("last_used_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, revokedAt])
+  @@map("sessions")
+}
+
+model AccessLog {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  event          AccessEvent
+  userId         String?     @map("user_id") @db.Uuid
+  emailAttempted String?     @map("email_attempted")
+  ipAddress      String?     @map("ip_address")
+  userAgent      String?     @map("user_agent")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("access_logs")
+}
+
+model Player {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  fullName       String       @map("full_name")
+  normalizedName String       @map("normalized_name")
+  nameKey        String       @map("name_key")
+  birthDate      DateTime?    @map("birth_date") @db.Date
+  sex            String?
+  federation     String       @default("MEX")
+  fideId         String?      @unique @map("fide_id")
+  nationalId     String?      @unique @map("national_id")
+  clubCode       String?      @map("club_code")
+  email          String?
+  phone          String?
+  status         PlayerStatus @default(PENDING)
+  kFactor        Int?         @map("k_factor")
+  createdById    String?      @map("created_by_id") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([nameKey, birthDate])
+  @@index([nameKey])
+  @@index([normalizedName])
+  @@map("players")
+}

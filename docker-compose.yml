@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: backend_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-chesshub}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-chesshub}
+      POSTGRES_DB: ${DB_NAME:-chesshub_dev}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: backend_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: backend_mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  api:
+    build: .
+    container_name: backend_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      DATABASE_URL: postgresql://${DB_USER:-chesshub}:${DB_PASSWORD:-chesshub}@postgres:5432/${DB_NAME:-chesshub_dev}
+      # Valor de desarrollo; en un despliegue real se define JWT_SECRET en el entorno
+      JWT_SECRET: ${JWT_SECRET:-secreto-de-desarrollo-sin-uso-en-produccion-0001}
+      JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
+      REFRESH_TTL_DAYS: ${REFRESH_TTL_DAYS:-7}
+      BCRYPT_COST: ${BCRYPT_COST:-12}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      MAIL_FROM: ${MAIL_FROM:-ChessHub <no-reply@chesshub.local>}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${PORT:-3000}:3000"
+
+volumes:
+  pgdata:
+    driver: local
+  redisdata:
+    driver: local
