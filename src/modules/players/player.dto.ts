@@ -10,6 +10,8 @@ interface PlayerRow {
   email: string | null;
   phone: string | null;
   status: string;
+  kFactor: number | null;
+  ratingElo: { toString(): string } | null;
   createdAt: Date;
 }
 
@@ -21,6 +23,7 @@ export interface PublicPlayerDto {
   federation: string;
   fideId: string | null;
   clubCode: string | null;
+  ratingElo: number | null;
   status: string;
 }
 
@@ -29,6 +32,7 @@ export interface PrivatePlayerDto extends PublicPlayerDto {
   nationalId: string | null;
   email: string | null;
   phone: string | null;
+  kFactor: number | null;
   createdAt: Date;
 }
 
@@ -41,6 +45,7 @@ export function toPublicPlayerDto(player: PlayerRow): PublicPlayerDto {
     federation: player.federation,
     fideId: player.fideId,
     clubCode: player.clubCode,
+    ratingElo: player.ratingElo === null ? null : Number(player.ratingElo.toString()),
     status: player.status,
   };
 }
@@ -52,6 +57,7 @@ export function toPrivatePlayerDto(player: PlayerRow): PrivatePlayerDto {
     nationalId: player.nationalId,
     email: player.email,
     phone: player.phone,
+    kFactor: player.kFactor,
     createdAt: player.createdAt,
   };
 }
