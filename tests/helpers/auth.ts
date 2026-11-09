@@ -26,6 +26,27 @@ export async function createSession(app: Express) {
   return { email, ...(res.body as { token: string; refreshToken: string; user: { id: string } }) };
 }
 
+// Sesión de un usuario nuevo con un rol de federación (o sin rol si no se indica)
+export async function sessionWithRole(app: Express, roleCode?: string) {
+  const session = await createSession(app);
+  if (roleCode) await grantRole(session.user.id, roleCode);
+  return session;
+}
+
+export async function grantScopedRole(
+  userId: string,
+  roleCode: string,
+  scopeType: 'STATE' | 'MUNICIPALITY' | 'TOURNAMENT',
+  scopeId: string,
+): Promise<void> {
+  const role = await prisma.role.findUniqueOrThrow({ where: { code: roleCode } });
+  await prisma.userRole.create({ data: { userId, roleId: role.id, scopeType, scopeId } });
+}
+
+export function bearer(token: string): [string, string] {
+  return ['Authorization', `Bearer ${token}`];
+}
+
 export async function grantRole(userId: string, roleCode: string): Promise<void> {
   const role = await prisma.role.findUniqueOrThrow({ where: { code: roleCode } });
   await prisma.userRole.create({ data: { userId, roleId: role.id, scopeType: 'FEDERATION' } });

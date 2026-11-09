@@ -138,12 +138,172 @@ model Player {
   phone          String?
   status         PlayerStatus @default(PENDING)
   kFactor        Int?         @map("k_factor")
+  ratingElo      Decimal?     @map("rating_elo") @db.Decimal(6, 1)
   createdById    String?      @map("created_by_id") @db.Uuid
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  whitePairings Pairing[] @relation("PairingWhite")
+  blackPairings Pairing[] @relation("PairingBlack")
+  whiteGames    Game[]    @relation("GameWhite")
+  blackGames    Game[]    @relation("GameBlack")
+
   @@unique([nameKey, birthDate])
   @@index([nameKey])
   @@index([normalizedName])
+  @@index([ratingElo, fideId])
+  @@index([clubCode])
   @@map("players")
+}
+
+enum TournamentStatus {
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  IN_PROGRESS
+  ROUND_IN_PROGRESS
+  FINISHED
+  CANCELLED
+
+  @@map("tournament_status")
+}
+
+enum RoundStatus {
+  PENDING
+  IN_PROGRESS
+  FINISHED
+
+  @@map("round_status")
+}
+
+enum GameResult {
+  PENDING
+  WHITE_WINS
+  BLACK_WINS
+  DRAW
+
+  @@map("game_result")
+}
+
+model Category {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  name        String
+  description String?
+  minAge      Int?     @map("min_age")
+  maxAge      Int?     @map("max_age")
+  defaultCost Decimal  @default(0) @map("default_cost") @db.Decimal(10, 2)
+  usesElo     Boolean  @default(false) @map("uses_elo")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tournaments TournamentCategory[]
+
+  @@map("categories")
+}
+
+model Tournament {
+  id           String           @id @default(uuid(7)) @db.Uuid
+  name         String
+  description  String?
+  venue        String?
+  city         String?
+  startDate    DateTime         @map("start_date") @db.Date
+  endDate      DateTime         @map("end_date") @db.Date
+  roundsPlanned Int?            @map("rounds_planned")
+  maxPlayers   Int?             @map("max_players")
+  timeControl  String?          @map("time_control")
+  status       TournamentStatus @default(REGISTRATION_OPEN)
+  isActive     Boolean          @default(true) @map("is_active")
+  createdById  String?          @map("created_by_id") @db.Uuid
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  categories TournamentCategory[]
+  rounds     Round[]
+
+  @@index([startDate])
+  @@index([status, startDate])
+  @@map("tournaments")
+}
+
+model TournamentCategory {
+  tournamentId String   @map("tournament_id") @db.Uuid
+  categoryId   String   @map("category_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Restrict)
+  category   Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@id([tournamentId, categoryId])
+  @@index([categoryId])
+  @@map("tournament_categories")
+}
+
+model Round {
+  id           String      @id @default(uuid(7)) @db.Uuid
+  tournamentId String      @map("tournament_id") @db.Uuid
+  number       Int
+  status       RoundStatus @default(PENDING)
+  startedAt    DateTime?   @map("started_at") @db.Timestamptz(3)
+  finishedAt   DateTime?   @map("finished_at") @db.Timestamptz(3)
+  isActive     Boolean     @default(true) @map("is_active")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Restrict)
+  pairings   Pairing[]
+  games      Game[]
+
+  @@unique([tournamentId, number])
+  @@map("rounds")
+}
+
+model Pairing {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  tournamentId  String   @map("tournament_id") @db.Uuid
+  roundNumber   Int      @map("round_number")
+  board         Int
+  whitePlayerId String   @map("white_player_id") @db.Uuid
+  blackPlayerId String?  @map("black_player_id") @db.Uuid
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  round Round   @relation(fields: [tournamentId, roundNumber], references: [tournamentId, number], onDelete: Restrict)
+  white Player  @relation("PairingWhite", fields: [whitePlayerId], references: [id], onDelete: Restrict)
+  black Player? @relation("PairingBlack", fields: [blackPlayerId], references: [id], onDelete: Restrict)
+  game  Game?
+
+  @@unique([tournamentId, roundNumber, board])
+  @@unique([tournamentId, roundNumber, whitePlayerId])
+  @@unique([tournamentId, roundNumber, blackPlayerId])
+  @@index([whitePlayerId])
+  @@index([blackPlayerId])
+  @@map("pairings")
+}
+
+model Game {
+  id            String     @id @default(uuid(7)) @db.Uuid
+  tournamentId  String     @map("tournament_id") @db.Uuid
+  roundNumber   Int        @map("round_number")
+  pairingId     String?    @unique @map("pairing_id") @db.Uuid
+  whitePlayerId String     @map("white_player_id") @db.Uuid
+  blackPlayerId String     @map("black_player_id") @db.Uuid
+  result        GameResult @default(PENDING)
+  pgn           String?
+  playedAt      DateTime?  @map("played_at") @db.Timestamptz(3)
+  isActive      Boolean    @default(true) @map("is_active")
+  createdAt     DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  round   Round    @relation(fields: [tournamentId, roundNumber], references: [tournamentId, number], onDelete: Restrict)
+  pairing Pairing? @relation(fields: [pairingId], references: [id], onDelete: Restrict)
+  white   Player   @relation("GameWhite", fields: [whitePlayerId], references: [id], onDelete: Restrict)
+  black   Player   @relation("GameBlack", fields: [blackPlayerId], references: [id], onDelete: Restrict)
+
+  @@index([tournamentId, roundNumber])
+  @@index([whitePlayerId])
+  @@index([blackPlayerId])
+  @@map("games")
 }

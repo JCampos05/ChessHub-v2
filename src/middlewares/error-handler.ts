@@ -55,6 +55,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
       code: 'PAYLOAD_TOO_LARGE',
       message: 'El cuerpo de la petición es demasiado grande',
     };
+  } else if (hasProp(err, 'code') && err.code === 'P2003') {
+    statusCode = 400;
+    body = {
+      status: 'error',
+      statusCode,
+      code: 'REFERENCE_NOT_FOUND',
+      message: 'Los datos enviados hacen referencia a un registro que no existe',
+    };
   } else if (hasProp(err, 'code') && err.code === 'P2002') {
     statusCode = 409;
     body = {

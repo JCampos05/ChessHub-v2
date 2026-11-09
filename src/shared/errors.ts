@@ -19,6 +19,12 @@ export class AppError extends Error {
 export const badRequest = (message: string, errors?: FieldError[], code = 'VALIDATION_ERROR') =>
   new AppError(400, code, message, errors);
 
+// El cuerpo menciona un registro (torneo, jugador, categoría...) que no existe o está inactivo
+export const referenceNotFound = (field: string, message: string) =>
+  new AppError(400, 'REFERENCE_NOT_FOUND', 'Los datos enviados hacen referencia a un registro que no existe', [
+    { field, message },
+  ]);
+
 export const unauthorized = (code: string, message: string) => new AppError(401, code, message);
 
 export const forbidden = (code: string, message: string) => new AppError(403, code, message);
