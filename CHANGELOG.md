@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.0-e1.2]
+
+### Agregado
+- Entidades de negocio con migracion revisada: categorias, torneos (con vinculo a categorias), rondas, emparejamientos y partidas; el rating Elo es una columna de jugadores.
+- CRUD con baja logica (`DELETE` responde 200 con el recurso y es idempotente) para `/categorias`, `/torneos`, `/jugadores`, `/rondas`, `/emparejamientos` y `/partidas`, con alias en ingles (`/categories`, `/tournaments`, `/players`, `/rounds`, `/pairings`, `/games`).
+- Vinculo de categorias a torneos: `GET /torneos/:id/categorias` lista, y `PUT` y `DELETE /torneos/:id/categorias/:categoryId` vinculan y desvinculan.
+- Listados paginados `{ data, meta }` con ordenamiento permitido por lista blanca y filtros por recurso (texto, estado, fechas, club, rango de rating, torneo, ronda, jugador y resultado).
+- Integridad en la base de datos: llaves foraneas RESTRICT, llave compuesta de emparejamientos y partidas hacia rondas, restricciones CHECK (fechas, rangos, mesa, rating) y nombre de categoria unico sin distinguir mayusculas.
+- Indices B-Tree: rating y FIDE de jugadores, club, fecha y estado de torneos, y ronda de partidas.
+- Emparejamientos: mesa unica por ronda, un jugador por ronda aunque cambie de color, descanso (bye) sin jugador de negras; las escrituras de una ronda se serializan con bloqueo de fila.
+- Permisos por rol y ambito evaluados en el servidor para torneos, catalogos, jugadores, rating, rondas y partidas.
+- Codigo `REFERENCE_NOT_FOUND` (400) para referencias del cuerpo a registros inexistentes o inactivos, y codigos de conflicto `ROUND_DUPLICATE`, `ROUND_NOT_EDITABLE`, `BOARD_TAKEN`, `PLAYER_ALREADY_PAIRED`, `GAME_DUPLICATE`, `GAME_HAS_RESULT` y `TOURNAMENT_NOT_EDITABLE`.
+- Pruebas de integracion por recurso, de concurrencia, de integridad referencial y de uso de indices con `EXPLAIN`.
+
+### Cambiado
+- El script `pnpm smoke` evalua el entregable e1.2.
+- El rating de jugadores se expone como `ratingElo` y solo se modifica con el permiso de rating.
+
 ## [0.1.0-e1.1]
 
 ### Agregado

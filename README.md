@@ -22,7 +22,7 @@ El resto de variables tiene valor por omision (`PORT`, `BCRYPT_COST`, `CORS_ORIG
 ```bash
 pnpm install
 docker compose up -d postgres redis mailpit
-pnpm exec prisma generate
+pnpm exec prisma generate --no-hints
 pnpm db:deploy
 pnpm db:seed
 pnpm dev
@@ -68,7 +68,7 @@ src/
   shared/        errores, validacion, paginacion
   middlewares/   autenticacion, limite de peticiones, errores
   domain/        logica pura (coincidencia de nombres)
-  modules/       auth, users, players, health
+  modules/       auth, users, players, categories, tournaments, rounds, pairings, games, health
   app.ts         createApp()
   server.ts      arranque y cierre ordenado
 prisma/          esquema, migraciones y semilla
@@ -88,6 +88,21 @@ scripts/         pruebas de humo
 | `POST /api/v1/auth/logout` | Bearer | Cierra la sesion actual |
 | `POST /api/v1/players` | Bearer | Alta de jugador |
 | `GET /api/v1/players/:id` | Bearer | Consulta de jugador |
+
+### Recursos con CRUD (entidades y catalogos)
+
+Cada recurso ofrece `GET /` (paginado), `POST /`, `GET /:id`, `PATCH /:id` y `DELETE /:id` (baja logica) bajo `/api/v1`, con Bearer. Leer requiere sesion; escribir requiere un rol con permiso (por ambito cuando aplica).
+
+| Recurso (espanol / ingles) | Notas |
+|---|---|
+| `/categorias` / `/categories` | Nombre unico sin distinguir mayusculas; rango de edades y costo |
+| `/torneos` / `/tournaments` | Filtros `q`, `estado`, `desde`, `hasta`; `/:id/categorias` vincula categorias |
+| `/jugadores` / `/players` | Filtros `q`, `club`, `ratingMin`, `ratingMax`, `status`; el rating exige permiso propio |
+| `/rondas` / `/rounds` | Numero unico por torneo, hasta las rondas planeadas |
+| `/emparejamientos` / `/pairings` | Mesa y jugador unicos por ronda; sin negras es descanso (bye) |
+| `/partidas` / `/games` | Resultado `PENDING` al crear; PGN y fecha opcionales |
+
+Los listados usan `page`, `limit`, `sortBy`, `order` e `includeInactive`. Una referencia a un registro inexistente en el cuerpo responde 400 `REFERENCE_NOT_FOUND`.
 
 Los errores tienen la forma `{ status, statusCode, code, message, errors? }`.
 
