@@ -22,9 +22,14 @@ export const tournamentRepository = {
       ...(query.desde ? { gte: toDateOnly(query.desde) } : {}),
       ...(query.hasta ? { lte: toDateOnly(query.hasta) } : {}),
     };
+    // "Abiertas": en convocatoria y con inicio posterior a hoy (UTC)
+    const today = toDateOnly(new Date().toISOString().slice(0, 10));
     const where: Prisma.TournamentWhereInput = {
       ...(query.includeInactive ? {} : { isActive: true }),
-      ...(query.estado ? { status: query.estado } : {}),
+      ...(query.estado ? { status: { in: query.estado } } : {}),
+      ...(query.abiertas ? { AND: [{ status: 'REGISTRATION_OPEN' }, { startDate: { gt: today } }] } : {}),
+      ...(query.city ? { city: { equals: query.city, mode: 'insensitive' } } : {}),
+      ...(query.categoryId ? { categories: { some: { categoryId: query.categoryId } } } : {}),
       ...(Object.keys(startDate).length > 0 ? { startDate } : {}),
       ...(query.q
         ? {

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { withAliases } from '../../shared/aliases.js';
 import { calendarDateSchema } from '../../shared/dates.js';
-import { listQueryShape, type ListQuery } from '../../shared/pagination.js';
+import { booleanQuery, listQueryShape, type ListQuery } from '../../shared/pagination.js';
+import { csvList } from '../../shared/query-lists.js';
 import { parseTournamentStatus, type TournamentStatusCode } from './tournament-status.js';
 
 const aliases = withAliases({
@@ -15,6 +16,8 @@ const aliases = withAliases({
   maxPlayers: ['cupo', 'maxJugadores'],
   timeControl: ['ritmo', 'controlTiempo'],
 });
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const optionalText = (max: number) => z.string().trim().max(max, 'El texto es demasiado largo').nullable();
 
@@ -86,34 +89,46 @@ export const updateTournamentSchema = z.preprocess(
     .refine((value) => Object.keys(value).length > 0, 'Indica al menos un campo para actualizar'),
 );
 
-export const TOURNAMENT_SORT_FIELDS = ['id', 'name', 'startDate', 'createdAt'] as const;
+export const TOURNAMENT_SORT_FIELDS = ['id', 'name', 'startDate', 'endDate', 'city', 'createdAt'] as const;
 
-export const listTournamentsQuerySchema = z.object({
-  ...listQueryShape(TOURNAMENT_SORT_FIELDS, 'startDate', 'desc'),
-  q: z.string().trim().min(1).max(100).optional(),
-  estado: z
-    .string()
-    .transform((value, ctx) => {
-      const status = parseTournamentStatus(value);
-      if (!status) {
-        ctx.addIssue({
-          code: 'custom',
-          message: 'Estado no válido. Usa convocatoria, inscripciones_cerradas, en_juego, ronda_en_curso, finalizado o cancelado',
-        });
-        return z.NEVER;
-      }
-      return status;
-    })
-    .optional(),
-  desde: calendarDateSchema.optional(),
-  hasta: calendarDateSchema.optional(),
+const statusItem = z.string().transform((value, ctx) => {
+  const status = parseTournamentStatus(value);
+  if (!status) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Estado no válido. Usa convocatoria, inscripciones_cerradas, en_juego, ronda_en_curso, finalizado o cancelado',
+    });
+    return z.NEVER;
+  }
+  return status;
 });
+
+const queryAliases = withAliases({ city: ['ciudad'] });
+
+export const listTournamentsQuerySchema = z.preprocess(
+  queryAliases,
+  z.object({
+    ...listQueryShape(TOURNAMENT_SORT_FIELDS, 'startDate', 'desc'),
+    q: z.string().trim().min(1).max(100).optional(),
+    // Valores múltiples: estado=1,2 o estado=convocatoria,en_juego
+    estado: csvList(statusItem).optional(),
+    city: z.string().trim().min(1).max(100).optional(),
+    categoryId: z.string().regex(UUID_PATTERN, 'El identificador de la categoría no es válido').optional(),
+    // abiertas=true: en convocatoria y con fecha de inicio posterior a hoy. abiertas=false no filtra.
+    abiertas: booleanQuery.optional(),
+    desde: calendarDateSchema.optional(),
+    hasta: calendarDateSchema.optional(),
+  }),
+);
 
 export type CreateTournamentInput = z.infer<typeof createTournamentSchema>;
 export type UpdateTournamentInput = z.infer<typeof updateTournamentSchema>;
 export type ListTournamentsQuery = ListQuery<(typeof TOURNAMENT_SORT_FIELDS)[number]> & {
   q?: string | undefined;
-  estado?: TournamentStatusCode | undefined;
+  estado?: TournamentStatusCode[] | undefined;
+  city?: string | undefined;
+  categoryId?: string | undefined;
+  abiertas?: boolean | undefined;
   desde?: string | undefined;
   hasta?: string | undefined;
 };

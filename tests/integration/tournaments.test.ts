@@ -188,6 +188,98 @@ describe('torneos (RF06, RF09, RNF08)', () => {
       expect(byDates.body.data.map((t: { name: string }) => t.name)).toEqual(['Copa Primavera']);
     });
 
+    describe('filtros avanzados (RF10, RF12)', () => {
+      const names = (res: { body: { data: { name: string }[] } }) => res.body.data.map((t) => t.name).sort();
+
+      async function seedTournaments() {
+        const { token } = await sessionWithRole(app, 'FEDERATION_ADMIN');
+        const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+        const nextWeek = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+        const past = '2020-01-10';
+
+        const a = await createTournament(token, { ...valid, name: 'Alfa', city: 'Los Mochis', startDate: tomorrow, endDate: nextWeek });
+        const b = await createTournament(token, { ...valid, name: 'Beta', city: 'Culiacán', startDate: tomorrow, endDate: nextWeek });
+        const c = await createTournament(token, { ...valid, name: 'Gamma', city: 'Los Mochis', startDate: past, endDate: past });
+        const d = await createTournament(token, { ...valid, name: 'Delta', city: 'Mazatlán', startDate: tomorrow, endDate: nextWeek });
+        await prisma.tournament.update({ where: { id: b.body.id }, data: { status: 'IN_PROGRESS' } });
+        await prisma.tournament.update({ where: { id: d.body.id }, data: { status: 'CANCELLED' } });
+        return { token, ids: { a: a.body.id as string, b: b.body.id as string, c: c.body.id as string, d: d.body.id as string } };
+      }
+
+      it('estado admite varios valores y mezcla nombres, códigos y posiciones', async () => {
+        const { token } = await seedTournaments();
+        const res = await request(app)
+          .get('/api/v1/torneos?estado=en_juego,CANCELLED')
+          .set(...bearer(token))
+          .expect(200);
+        expect(names(res)).toEqual(['Beta', 'Delta']);
+
+        const same = await request(app).get('/api/v1/torneos?estado=3,en_juego,IN_PROGRESS').set(...bearer(token)).expect(200);
+        expect(names(same)).toEqual(['Beta']);
+      });
+
+      it('ciudad filtra sin distinguir mayúsculas ni usar coincidencia parcial', async () => {
+        const { token } = await seedTournaments();
+        const res = await request(app).get('/api/v1/torneos?ciudad=los mochis').set(...bearer(token)).expect(200);
+        expect(names(res)).toEqual(['Alfa', 'Gamma']);
+
+        const partial = await request(app).get('/api/v1/torneos?ciudad=mochis').set(...bearer(token)).expect(200);
+        expect(partial.body.meta.total).toBe(0);
+
+        const english = await request(app).get('/api/v1/torneos?city=Culiacán').set(...bearer(token)).expect(200);
+        expect(names(english)).toEqual(['Beta']);
+      });
+
+      it('abiertas=true devuelve solo convocatorias con inicio futuro', async () => {
+        const { token } = await seedTournaments();
+        const res = await request(app).get('/api/v1/torneos?abiertas=true').set(...bearer(token)).expect(200);
+        expect(names(res)).toEqual(['Alfa']);
+
+        const all = await request(app).get('/api/v1/torneos?abiertas=false').set(...bearer(token)).expect(200);
+        expect(all.body.meta.total).toBe(4);
+      });
+
+      it('categoryId devuelve los torneos vinculados a esa categoría', async () => {
+        const { token, ids } = await seedTournaments();
+        const category = await request(app).post('/api/v1/categorias').set(...bearer(token)).send({ name: 'Sub-12' }).expect(201);
+        await request(app)
+          .put(`/api/v1/torneos/${ids.a}/categorias/${category.body.id}`)
+          .set(...bearer(token))
+          .expect(200);
+
+        const res = await request(app).get(`/api/v1/torneos?categoryId=${category.body.id}`).set(...bearer(token)).expect(200);
+        expect(names(res)).toEqual(['Alfa']);
+
+        const none = await request(app).get(`/api/v1/torneos?categoryId=${MISSING}`).set(...bearer(token)).expect(200);
+        expect(none.body.meta.total).toBe(0);
+      });
+
+      it('combina filtros y ordena por ciudad con desempate estable', async () => {
+        const { token } = await seedTournaments();
+        const res = await request(app)
+          .get('/api/v1/torneos?ciudad=Los Mochis&estado=1&abiertas=true&sortBy=city&order=asc')
+          .set(...bearer(token))
+          .expect(200);
+        expect(names(res)).toEqual(['Alfa']);
+
+        const sorted = await request(app).get('/api/v1/torneos?sortBy=city&order=asc').set(...bearer(token)).expect(200);
+        expect(sorted.body.data.map((t: { city: string }) => t.city)).toEqual(['Culiacán', 'Los Mochis', 'Los Mochis', 'Mazatlán']);
+      });
+
+      it.each([
+        'estado=1,nope',
+        'estado=',
+        'estado=1,2,3,4,5,6,convocatoria,en_juego,finalizado,cancelado,x',
+        'categoryId=no-es-uuid',
+        'abiertas=quizas',
+        'ciudad=',
+      ])('422: %s', async (query) => {
+        const { token } = await sessionWithRole(app);
+        const res = await request(app).get(`/api/v1/torneos?${query}`).set(...bearer(token)).expect(422);
+        expect(res.body.code).toBe('UNPROCESSABLE_ENTITY');
+      });
+    });
+
     it.each(['page=0', 'limit=101', 'sortBy=status', 'order=up', 'estado=abierto', 'desde=ayer', 'includeInactive=2'])(
       '422: parámetro inválido %s',
       async (query) => {
