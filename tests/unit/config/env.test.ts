@@ -31,6 +31,38 @@ describe('parseEnv (C-40)', () => {
     expect(env.CORS_ORIGINS).toEqual(['http://a.com', 'http://b.com']);
   });
 
+  it('Redis es opcional y la caché tiene valores por omisión', () => {
+    const env = parseEnv(base);
+
+    expect(env.REDIS_URL).toBeUndefined();
+    expect(env.CACHE_TTL_SECONDS).toBe(60);
+    expect(env.CACHE_LRU_CAPACITY).toBe(500);
+  });
+
+  it('acepta URL de Redis y ajustes de caché', () => {
+    const env = parseEnv({
+      ...base,
+      REDIS_URL: 'redis://localhost:6379',
+      CACHE_TTL_SECONDS: '120',
+      CACHE_LRU_CAPACITY: '2000',
+    });
+
+    expect(env.REDIS_URL).toBe('redis://localhost:6379');
+    expect(env.CACHE_TTL_SECONDS).toBe(120);
+    expect(env.CACHE_LRU_CAPACITY).toBe(2000);
+    expect(parseEnv({ ...base, REDIS_URL: 'rediss://host:6380' }).REDIS_URL).toBe('rediss://host:6380');
+  });
+
+  it.each([
+    ['REDIS_URL', 'http://localhost:6379'],
+    ['REDIS_URL', 'localhost:6379'],
+    ['CACHE_TTL_SECONDS', '0'],
+    ['CACHE_TTL_SECONDS', '99999'],
+    ['CACHE_LRU_CAPACITY', '5'],
+  ])('rechaza %s con valor inválido (%s)', (name, value) => {
+    expect(() => parseEnv({ ...base, [name]: value })).toThrow(name);
+  });
+
   it('trata las variables vacías como no definidas', () => {
     const env = parseEnv({ ...base, SMTP_USER: '', PORT: '' });
 

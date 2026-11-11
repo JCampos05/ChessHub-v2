@@ -29,6 +29,14 @@ const envSchema = z.object({
           .filter((origin) => origin.length > 0),
       ),
 
+    // Sin REDIS_URL la caché usa solo la memoria del proceso (LRU)
+    REDIS_URL: z
+      .string()
+      .regex(/^rediss?:\/\//, 'debe ser una URL de Redis (redis://host:6379)')
+      .optional(),
+    CACHE_TTL_SECONDS: z.coerce.number().int().min(1).max(3600).default(60),
+    CACHE_LRU_CAPACITY: z.coerce.number().int().min(10).max(100_000).default(500),
+
     SMTP_HOST: z.string().default('localhost'),
     SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1025),
     SMTP_USER: z.string().optional(),

@@ -14,6 +14,7 @@ export default defineConfig({
       DATABASE_URL: 'postgresql://chesshub:chesshub@localhost:5432/chesshub_test',
       JWT_SECRET: 'secreto-de-pruebas-con-mas-de-32-caracteres',
       BCRYPT_COST: '4',
+      REDIS_URL: '',
       LOG_LEVEL: 'silent',
     },
     coverage: {
