@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
+import { closeRedis } from './lib/redis.js';
 
 const app = createApp();
 const server = app.listen(env.PORT, () => {
@@ -23,6 +24,7 @@ async function shutdown(signal: string): Promise<void> {
   forced.unref();
 
   server.close(async () => {
+    await closeRedis();
     await prisma.$disconnect();
     process.exit(0);
   });

@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { prisma } from '../../src/lib/prisma.js';
+import { redisHealth } from '../../src/lib/redis.js';
 
 const app = createApp();
 
@@ -16,6 +17,18 @@ describe('salud y rutas base (RNF-12)', () => {
     expect(res.body.database).toBe('up');
     expect(typeof res.body.uptime).toBe('number');
     expect(res.headers['x-request-id']).toBeTruthy();
+  });
+
+  it('informa Redis como deshabilitado cuando no está configurado', async () => {
+    const res = await request(app).get('/api/v1/health').expect(200);
+    expect(res.body.redis).toBe('disabled');
+  });
+
+  it('con Redis caído sigue respondiendo 200: la caché degrada, el servicio no (RNF04)', async () => {
+    const spy = vi.spyOn(redisHealth, 'check').mockResolvedValueOnce('down');
+    const res = await request(app).get('/api/v1/health').expect(200);
+    expect(res.body).toMatchObject({ status: 'ok', database: 'up', redis: 'down' });
+    spy.mockRestore();
   });
 
   it('GET /health responde 200', async () => {

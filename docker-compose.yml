@@ -41,6 +41,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 3000
@@ -51,6 +53,7 @@ services:
       REFRESH_TTL_DAYS: ${REFRESH_TTL_DAYS:-7}
       BCRYPT_COST: ${BCRYPT_COST:-12}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      REDIS_URL: redis://redis:6379
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       MAIL_FROM: ${MAIL_FROM:-ChessHub <no-reply@chesshub.local>}
