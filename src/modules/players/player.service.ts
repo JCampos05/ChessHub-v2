@@ -1,5 +1,6 @@
 import { nameKey } from '../../domain/name-matching/name-key.js';
 import { normalizeName } from '../../domain/name-matching/normalize.js';
+import { cache } from '../../lib/cache.js';
 import { toDateOnly } from '../../shared/dates.js';
 import { conflict, forbidden, notFound } from '../../shared/errors.js';
 import { paginate } from '../../shared/pagination.js';
@@ -21,6 +22,9 @@ async function canReadPrivate(userId: string): Promise<boolean> {
   const assignments = await permissionService.assignmentsOf(userId);
   return assignments.some((assignment) => PRIVATE_READERS.includes(assignment.roleCode));
 }
+
+// Recurso de caché: toda escritura sobre jugadores lo invalida
+export const PLAYER_CACHE_RESOURCE = 'players';
 
 const duplicatedIdentity = () => conflict('PLAYER_DUPLICATE', 'Ya existe un jugador con esos datos de identificación');
 
@@ -54,6 +58,7 @@ export const playerService = {
         phone: input.phone ?? null,
         createdById,
       });
+      await cache.bump(PLAYER_CACHE_RESOURCE);
       return toPrivatePlayerDto(player);
     } catch (error) {
       if (isUniqueViolation(error)) throw duplicatedIdentity();
@@ -68,9 +73,17 @@ export const playerService = {
   },
 
   async list(query: ListPlayersQuery, requesterId: string) {
-    const { rows, total } = await playerRepository.list(query);
-    const toDto = (await canReadPrivate(requesterId)) ? toPrivatePlayerDto : toPublicPlayerDto;
-    return paginate(rows.map(toDto), query.page, query.limit, total);
+    const load = async <T>(toDto: (player: Parameters<typeof toPublicPlayerDto>[0]) => T) => {
+      const { rows, total } = await playerRepository.list(query);
+      return paginate(rows.map(toDto), query.page, query.limit, total);
+    };
+
+    // La vista privada incluye correo y teléfono: nunca pasa por la caché, que es compartida entre usuarios (RN-07).
+    // Solo se cachea la vista pública, que no contiene datos de contacto ni fecha de nacimiento.
+    if (await canReadPrivate(requesterId)) return load(toPrivatePlayerDto);
+    return cache.getOrLoad(PLAYER_CACHE_RESOURCE, { op: 'list', audience: 'public', query }, () =>
+      load(toPublicPlayerDto),
+    );
   },
 
   async update(id: string, input: UpdatePlayerInput, requesterId: string): Promise<PrivatePlayerDto> {
@@ -104,6 +117,7 @@ export const playerService = {
           ? {}
           : { fullName, normalizedName: normalizeName(fullName), nameKey: key }),
       });
+      await cache.bump(PLAYER_CACHE_RESOURCE);
       return toPrivatePlayerDto(player);
     } catch (error) {
       if (isUniqueViolation(error)) throw duplicatedIdentity();
@@ -115,6 +129,8 @@ export const playerService = {
     const current = await playerRepository.findById(id);
     if (!current) throw notFound('El jugador no existe');
     if (current.status === 'INACTIVE') return toPrivatePlayerDto(current);
-    return toPrivatePlayerDto(await playerRepository.update(id, { status: 'INACTIVE' }));
+    const updated = await playerRepository.update(id, { status: 'INACTIVE' });
+    await cache.bump(PLAYER_CACHE_RESOURCE);
+    return toPrivatePlayerDto(updated);
   },
 };
