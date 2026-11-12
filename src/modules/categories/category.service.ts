@@ -1,3 +1,4 @@
+import { cache } from '../../lib/cache.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
 import { paginate } from '../../shared/pagination.js';
 import { isUniqueViolation } from '../../shared/prisma-errors.js';
@@ -12,22 +13,30 @@ import {
 
 const duplicated = () => conflict('CATEGORY_DUPLICATE', 'Ya existe una categoría con ese nombre');
 
+// Recurso de caché: toda escritura lo invalida (RF13)
+const CACHE_RESOURCE = 'categories';
+
 export const categoryService = {
-  async list(query: ListCategoriesQuery) {
-    const { rows, total } = await categoryRepository.list(query);
-    return paginate(rows.map(toCategoryDto), query.page, query.limit, total);
+  list(query: ListCategoriesQuery) {
+    return cache.getOrLoad(CACHE_RESOURCE, { op: 'list', query }, async () => {
+      const { rows, total } = await categoryRepository.list(query);
+      return paginate(rows.map(toCategoryDto), query.page, query.limit, total);
+    });
   },
 
-  async getById(id: string): Promise<CategoryDto> {
-    const category = await categoryRepository.findById(id);
-    if (!category) throw notFound('La categoría no existe');
-    return toCategoryDto(category);
+  getById(id: string): Promise<CategoryDto> {
+    return cache.getOrLoad(CACHE_RESOURCE, { op: 'get', id }, async () => {
+      const category = await categoryRepository.findById(id);
+      if (!category) throw notFound('La categoría no existe');
+      return toCategoryDto(category);
+    });
   },
 
   async create(input: CreateCategoryInput, createdById: string): Promise<CategoryDto> {
     if (await categoryRepository.findByName(input.name)) throw duplicated();
     try {
       const category = await categoryRepository.create({ ...input, createdById });
+      await cache.bump(CACHE_RESOURCE);
       return toCategoryDto(category);
     } catch (error) {
       if (isUniqueViolation(error)) throw duplicated();
@@ -56,6 +65,7 @@ export const categoryService = {
 
     try {
       const category = await categoryRepository.update(id, input);
+      await cache.bump(CACHE_RESOURCE);
       return toCategoryDto(category);
     } catch (error) {
       if (isUniqueViolation(error)) throw duplicated();
@@ -67,6 +77,8 @@ export const categoryService = {
     const current = await categoryRepository.findById(id);
     if (!current) throw notFound('La categoría no existe');
     if (!current.isActive) return toCategoryDto(current);
-    return toCategoryDto(await categoryRepository.update(id, { isActive: false }));
+    const updated = await categoryRepository.update(id, { isActive: false });
+    await cache.bump(CACHE_RESOURCE);
+    return toCategoryDto(updated);
   },
 };

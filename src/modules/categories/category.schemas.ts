@@ -78,6 +78,8 @@ export const listCategoriesQuerySchema = z.object({
   ...listQueryShape(CATEGORY_SORT_FIELDS, 'name', 'asc'),
   q: z.string().trim().min(1).max(80).optional(),
   usaElo: booleanQuery.optional(),
+  // Categorías que admiten esa edad (sin límite inferior o superior cuenta como abierta)
+  edad: z.coerce.number().int('La edad debe ser un número entero').min(0).max(120).optional(),
 });
 
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
@@ -85,4 +87,5 @@ export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 export type ListCategoriesQuery = ListQuery<(typeof CATEGORY_SORT_FIELDS)[number]> & {
   q?: string | undefined;
   usaElo?: boolean | undefined;
+  edad?: number | undefined;
 };

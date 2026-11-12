@@ -1,3 +1,4 @@
+import { cache } from '../../lib/cache.js';
 import { badRequest, conflict, notFound, referenceNotFound } from '../../shared/errors.js';
 import { fromDateOnly, toDateOnly } from '../../shared/dates.js';
 import { paginate } from '../../shared/pagination.js';
@@ -23,14 +24,21 @@ async function requireTournament(id: string) {
   return tournament;
 }
 
+// Recurso de caché: toda escritura que cambie un torneo o sus categorías vinculadas lo invalida 
+export const TOURNAMENT_CACHE_RESOURCE = 'tournaments';
+
 export const tournamentService = {
-  async list(query: ListTournamentsQuery) {
-    const { rows, total } = await tournamentRepository.list(query);
-    return paginate(rows.map(toTournamentDto), query.page, query.limit, total);
+  list(query: ListTournamentsQuery) {
+    return cache.getOrLoad(TOURNAMENT_CACHE_RESOURCE, { op: 'list', query }, async () => {
+      const { rows, total } = await tournamentRepository.list(query);
+      return paginate(rows.map(toTournamentDto), query.page, query.limit, total);
+    });
   },
 
-  async getById(id: string): Promise<TournamentDto> {
-    return toTournamentDto(await requireTournament(id));
+  getById(id: string): Promise<TournamentDto> {
+    return cache.getOrLoad(TOURNAMENT_CACHE_RESOURCE, { op: 'get', id }, async () =>
+      toTournamentDto(await requireTournament(id)),
+    );
   },
 
   async create(input: CreateTournamentInput, createdById: string): Promise<TournamentDto> {
@@ -40,6 +48,7 @@ export const tournamentService = {
       endDate: toDateOnly(input.endDate),
       createdById,
     });
+    await cache.bump(TOURNAMENT_CACHE_RESOURCE);
     return toTournamentDto(tournament);
   },
 
@@ -66,6 +75,7 @@ export const tournamentService = {
       ...(startDate === undefined ? {} : { startDate: toDateOnly(startDate) }),
       ...(endDate === undefined ? {} : { endDate: toDateOnly(endDate) }),
     });
+    await cache.bump(TOURNAMENT_CACHE_RESOURCE);
     return toTournamentDto(updated);
   },
 
@@ -75,7 +85,9 @@ export const tournamentService = {
     if (isRunning(current.status)) {
       throw conflict('TOURNAMENT_NOT_EDITABLE', 'El torneo está en juego y no puede darse de baja');
     }
-    return toTournamentDto(await tournamentRepository.update(id, { isActive: false }));
+    const updated = await tournamentRepository.update(id, { isActive: false });
+    await cache.bump(TOURNAMENT_CACHE_RESOURCE);
+    return toTournamentDto(updated);
   },
 
   async listCategories(id: string): Promise<CategoryDto[]> {
@@ -92,6 +104,7 @@ export const tournamentService = {
 
     try {
       await tournamentRepository.linkCategory(id, categoryId);
+      await cache.bump(TOURNAMENT_CACHE_RESOURCE);
     } catch (error) {
       if (isForeignKeyViolation(error)) throw referenceNotFound('categoryId', 'La categoría no existe');
       throw error;
@@ -103,6 +116,7 @@ export const tournamentService = {
     const tournament = await requireTournament(id);
     if (isFrozen(tournament.status)) throw notEditable();
     await tournamentRepository.unlinkCategory(id, categoryId);
+    await cache.bump(TOURNAMENT_CACHE_RESOURCE);
     return { message: 'Categoría desvinculada del torneo' };
   },
 };

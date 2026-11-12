@@ -26,6 +26,14 @@ export const categoryRepository = {
       ...(query.includeInactive ? {} : { isActive: true }),
       ...(query.q ? { name: { contains: query.q, mode: 'insensitive' } } : {}),
       ...(query.usaElo === undefined ? {} : { usesElo: query.usaElo }),
+      ...(query.edad === undefined
+        ? {}
+        : {
+            AND: [
+              { OR: [{ minAge: null }, { minAge: { lte: query.edad } }] },
+              { OR: [{ maxAge: null }, { maxAge: { gte: query.edad } }] },
+            ],
+          }),
     };
     const [rows, total] = await prisma.$transaction([
       prisma.category.findMany({
