@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { withAliases } from '../../shared/aliases.js';
 import { calendarDateSchema } from '../../shared/dates.js';
 import { booleanQuery, listQueryShape, type ListQuery } from '../../shared/pagination.js';
+import { csvList } from '../../shared/query-lists.js';
 import { withNameAlias } from '../auth/auth.schemas.js';
 
 const extraAliases = withAliases({
@@ -98,33 +99,50 @@ export const updatePlayerSchema = z.preprocess(
     .refine((value) => Object.keys(value).length > 0, 'Indica al menos un campo para actualizar'),
 );
 
-export const PLAYER_SORT_FIELDS = ['id', 'fullName', 'ratingElo', 'createdAt'] as const;
+export const PLAYER_SORT_FIELDS = ['id', 'fullName', 'ratingElo', 'birthDate', 'createdAt'] as const;
 
 const rating = z.coerce.number().min(0).max(3000);
+const age = z.coerce.number().int('La edad debe ser un número entero').min(0).max(120);
+
+const playerStatus = z.enum(['PENDING', 'ACTIVE', 'INACTIVE'], { error: 'Estado no válido' });
 
 export const listPlayersQuerySchema = z
   .object({
     ...listQueryShape(PLAYER_SORT_FIELDS, 'createdAt', 'desc'),
     includeInactive: booleanQuery.default(false),
     q: z.string().trim().min(1).max(100).optional(),
-    club: z.string().trim().min(1).max(30).optional(),
+    // Valores múltiples separados por coma: status=ACTIVE,PENDING
+    club: csvList(z.string().min(1).max(30)).optional(),
     ratingMin: rating.optional(),
     ratingMax: rating.optional(),
-    status: z.enum(['PENDING', 'ACTIVE', 'INACTIVE']).optional(),
-    federation: federation.optional(),
+    status: csvList(playerStatus).optional(),
+    federation: csvList(federation).optional(),
+    fideId: z.string().trim().min(1).max(20).optional(),
+    sex: sex.optional(),
+    // Años cumplidos a la fecha de hoy
+    edadMin: age.optional(),
+    edadMax: age.optional(),
   })
   .refine(
     (value) => value.ratingMin === undefined || value.ratingMax === undefined || value.ratingMin <= value.ratingMax,
     { message: 'ratingMin no puede ser mayor que ratingMax', path: ['ratingMin'] },
-  );
+  )
+  .refine((value) => value.edadMin === undefined || value.edadMax === undefined || value.edadMin <= value.edadMax, {
+    message: 'edadMin no puede ser mayor que edadMax',
+    path: ['edadMin'],
+  });
 
 export type CreatePlayerInput = z.infer<typeof createPlayerSchema>;
 export type UpdatePlayerInput = z.infer<typeof updatePlayerSchema>;
 export type ListPlayersQuery = ListQuery<(typeof PLAYER_SORT_FIELDS)[number]> & {
   q?: string | undefined;
-  club?: string | undefined;
+  club?: string[] | undefined;
   ratingMin?: number | undefined;
   ratingMax?: number | undefined;
-  status?: 'PENDING' | 'ACTIVE' | 'INACTIVE' | undefined;
-  federation?: string | undefined;
+  status?: ('PENDING' | 'ACTIVE' | 'INACTIVE')[] | undefined;
+  federation?: string[] | undefined;
+  fideId?: string | undefined;
+  sex?: 'M' | 'F' | undefined;
+  edadMin?: number | undefined;
+  edadMax?: number | undefined;
 };

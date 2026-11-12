@@ -1,6 +1,8 @@
+import { birthDateBounds } from '../../domain/age/age.js';
 import { normalizeName } from '../../domain/name-matching/normalize.js';
 import type { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../lib/prisma.js';
+import { toDateOnly } from '../../shared/dates.js';
 import { toSkipTake } from '../../shared/pagination.js';
 import type { ListPlayersQuery } from './player.schemas.js';
 
@@ -48,20 +50,38 @@ export const playerRepository = {
       ...(query.ratingMin === undefined ? {} : { gte: query.ratingMin }),
       ...(query.ratingMax === undefined ? {} : { lte: query.ratingMax }),
     };
-    const where: Prisma.PlayerWhereInput = {
-      ...(query.status ? { status: query.status } : query.includeInactive ? {} : { status: { not: 'INACTIVE' } }),
-      ...(query.club ? { clubCode: { equals: query.club, mode: 'insensitive' } } : {}),
-      ...(query.federation ? { federation: query.federation } : {}),
-      ...(Object.keys(rating).length > 0 ? { ratingElo: rating } : {}),
-      ...(query.q
-        ? {
+    const bounds = birthDateBounds(new Date().toISOString().slice(0, 10), { min: query.edadMin, max: query.edadMax });
+    const birthDate: Prisma.DateTimeNullableFilter = {
+      ...(bounds.onOrBefore ? { lte: toDateOnly(bounds.onOrBefore) } : {}),
+      ...(bounds.after ? { gt: toDateOnly(bounds.after) } : {}),
+    };
+
+    // Busca por contenido en el nombre normalizado (índice de trigramas) o por FIDE exacto.
+    // Si q solo tiene signos, el nombre normalizado queda vacío y solo cuenta el FIDE.
+    const normalizedQuery = query.q ? normalizeName(query.q) : '';
+    const textFilter: Prisma.PlayerWhereInput[] = query.q
+      ? [
+          {
             OR: [
-              { fullName: { contains: query.q, mode: 'insensitive' } },
-              { normalizedName: { contains: normalizeName(query.q), mode: 'insensitive' } },
+              ...(normalizedQuery ? [{ normalizedName: { contains: normalizedQuery } }] : []),
               { fideId: { equals: query.q } },
             ],
-          }
-        : {}),
+          },
+        ]
+      : [];
+    const clubFilter: Prisma.PlayerWhereInput[] = query.club
+      ? [{ OR: query.club.map((club) => ({ clubCode: { equals: club, mode: 'insensitive' as const } })) }]
+      : [];
+
+    const where: Prisma.PlayerWhereInput = {
+      ...(query.status ? { status: { in: query.status } } : query.includeInactive ? {} : { status: { not: 'INACTIVE' } }),
+      ...(query.federation ? { federation: { in: query.federation } } : {}),
+      ...(query.fideId ? { fideId: query.fideId } : {}),
+      ...(query.sex ? { sex: query.sex } : {}),
+      // Quien no tiene fecha de nacimiento no aparece al filtrar por edad (las comparaciones con NULL no coinciden)
+      ...(Object.keys(birthDate).length > 0 ? { birthDate } : {}),
+      ...(Object.keys(rating).length > 0 ? { ratingElo: rating } : {}),
+      AND: [...textFilter, ...clubFilter],
     };
     // Los jugadores sin rating siempre quedan al final
     const orderBy: Prisma.PlayerOrderByWithRelationInput[] = [
