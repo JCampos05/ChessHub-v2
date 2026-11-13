@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0-e2.1]
+
+### Agregado
+- Busqueda avanzada de jugadores: `q` (nombre o FIDE), `fideId`, `sex`, `edadMin` y `edadMax` (edad cumplida), `ratingMin`, `ratingMax` y valores multiples en `status`, `club` y `federation`.
+- Filtros de torneos: `ciudad`, `categoryId`, `abiertas` (inscripcion abierta y aun sin iniciar), `desde`, `hasta` y valores multiples en `estado`; nuevos campos de ordenamiento (`name`, `startDate`, `endDate`, `city`, `createdAt`).
+- Filtro `edad` en `/categorias`: devuelve las categorias cuyo rango de edades incluye esa edad.
+- Valores multiples separados por coma, con maximo 10 por filtro; un valor invalido o de mas responde 422.
+- Cache de lecturas con Redis y respaldo LRU en memoria del proceso: listados y detalle de torneos y categorias, y la vista publica del listado de jugadores. Se invalida en cada escritura y nunca guarda datos de contacto.
+- Si Redis no responde, la API sigue funcionando con la cache en memoria o consultando la base; un fallo de cache no produce errores HTTP.
+- `/health` informa el estado de Redis (`up` o `down`) sin devolver 503 cuando solo falla la cache.
+- Variables `REDIS_URL`, `CACHE_TTL_SECONDS` y `CACHE_LRU_CAPACITY`.
+- Migracion `search_indexes`: extension `pg_trgm`, indices GIN de trigramas para nombre de jugador y nombre, sede y ciudad de torneo, e indice por fecha de nacimiento.
+- Pruebas de planes `EXPLAIN` con tablas grandes y prueba de rendimiento con 50 000 jugadores y 5 000 torneos: p95 menor a 200 ms sin cache y menor a 50 ms con cache.
+
+### Cambiado
+- El script `pnpm smoke` evalua el entregable e2.1.
+
 ## [0.1.0-e1.2]
 
 ### Agregado

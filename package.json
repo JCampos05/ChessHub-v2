@@ -17,7 +17,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "smoke": "node scripts/smoke_test.js --deliverable=e1.2"
+    "smoke": "node scripts/smoke_test.js --deliverable=e2.1"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

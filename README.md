@@ -19,6 +19,14 @@ JWT_SECRET=un-secreto-de-al-menos-32-caracteres
 
 El resto de variables tiene valor por omision (`PORT`, `BCRYPT_COST`, `CORS_ORIGINS`, `LOG_LEVEL`, `SMTP_*`, `APP_BASE_URL`, `STORAGE_DIR`).
 
+Cache de lecturas (opcional):
+
+| Variable | Descripcion | Por omision |
+|---|---|---|
+| `REDIS_URL` | URL de Redis (`redis://host:6379`). Sin ella se usa solo la memoria del proceso | sin definir |
+| `CACHE_TTL_SECONDS` | Vigencia de cada entrada, de 1 a 3600 | 60 |
+| `CACHE_LRU_CAPACITY` | Entradas del respaldo en memoria, de 10 a 100000 | 500 |
+
 ```bash
 pnpm install
 docker compose up -d postgres redis mailpit
@@ -59,6 +67,8 @@ docker compose exec postgres psql -U chesshub -d chesshub_dev -c "CREATE DATABAS
 
 Las migraciones se aplican solas al iniciar `pnpm test`.
 
+La prueba de rendimiento (`tests/integration/read-performance.test.ts`) carga 50 000 jugadores y 5 000 torneos y tarda alrededor de 35 segundos.
+
 ## Estructura
 
 ```
@@ -95,14 +105,20 @@ Cada recurso ofrece `GET /` (paginado), `POST /`, `GET /:id`, `PATCH /:id` y `DE
 
 | Recurso (espanol / ingles) | Notas |
 |---|---|
-| `/categorias` / `/categories` | Nombre unico sin distinguir mayusculas; rango de edades y costo |
-| `/torneos` / `/tournaments` | Filtros `q`, `estado`, `desde`, `hasta`; `/:id/categorias` vincula categorias |
-| `/jugadores` / `/players` | Filtros `q`, `club`, `ratingMin`, `ratingMax`, `status`; el rating exige permiso propio |
+| `/categorias` / `/categories` | Nombre unico sin distinguir mayusculas; rango de edades y costo; filtro `edad` |
+| `/torneos` / `/tournaments` | Filtros `q`, `estado` (varios), `ciudad`, `categoryId`, `abiertas`, `desde`, `hasta`; `/:id/categorias` vincula categorias |
+| `/jugadores` / `/players` | Filtros `q` (nombre o FIDE), `fideId`, `sex`, `edadMin`, `edadMax`, `ratingMin`, `ratingMax`, `club`, `status` y `federation` (los tres ultimos admiten varios valores); el rating exige permiso propio |
 | `/rondas` / `/rounds` | Numero unico por torneo, hasta las rondas planeadas |
 | `/emparejamientos` / `/pairings` | Mesa y jugador unicos por ronda; sin negras es descanso (bye) |
 | `/partidas` / `/games` | Resultado `PENDING` al crear; PGN y fecha opcionales |
 
-Los listados usan `page`, `limit`, `sortBy`, `order` e `includeInactive`. Una referencia a un registro inexistente en el cuerpo responde 400 `REFERENCE_NOT_FOUND`.
+Los listados usan `page`, `limit`, `sortBy`, `order` e `includeInactive`. Los filtros con varios valores los reciben separados por coma (maximo 10, por ejemplo `estado=3,4`); un valor invalido responde 422. Una referencia a un registro inexistente en el cuerpo responde 400 `REFERENCE_NOT_FOUND`.
+
+## Cache
+
+Los listados y el detalle de torneos y categorias, y la vista publica del listado de jugadores, se guardan en Redis con respaldo en memoria. Cada escritura invalida el recurso afectado. La vista con datos de contacto nunca se guarda. Si Redis no esta disponible la API sigue respondiendo, y `GET /api/v1/health` muestra `redis: down` sin devolver 503.
+
+Las busquedas por texto usan indices de trigramas (`pg_trgm`); la migracion `search_indexes` crea la extension, por lo que el usuario de la base necesita permiso para ello.
 
 Los errores tienen la forma `{ status, statusCode, code, message, errors? }`.
 
