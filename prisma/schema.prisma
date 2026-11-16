@@ -147,6 +147,7 @@ model Player {
   blackPairings Pairing[] @relation("PairingBlack")
   whiteGames    Game[]    @relation("GameWhite")
   blackGames    Game[]    @relation("GameBlack")
+  registrations Registration[]
 
   @@unique([nameKey, birthDate])
   @@index([nameKey])
@@ -184,6 +185,27 @@ enum GameResult {
   @@map("game_result")
 }
 
+enum RegistrationStatus {
+  ACTIVE
+  CANCELLED
+
+  @@map("registration_status")
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+
+  @@map("payment_status")
+}
+
+enum PairingOrigin {
+  MANUAL
+  AUTO
+
+  @@map("pairing_origin")
+}
+
 model Category {
   id          String   @id @default(uuid(7)) @db.Uuid
   name        String
@@ -214,13 +236,16 @@ model Tournament {
   maxPlayers   Int?             @map("max_players")
   timeControl  String?          @map("time_control")
   status       TournamentStatus @default(REGISTRATION_OPEN)
+  registeredCount     Int       @default(0) @map("registered_count")
+  registrationCounter Int       @default(0) @map("registration_counter")
   isActive     Boolean          @default(true) @map("is_active")
   createdById  String?          @map("created_by_id") @db.Uuid
   createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  categories TournamentCategory[]
-  rounds     Round[]
+  categories    TournamentCategory[]
+  rounds        Round[]
+  registrations Registration[]
 
   @@index([startDate])
   @@index([status, startDate])
@@ -234,6 +259,8 @@ model TournamentCategory {
 
   tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Restrict)
   category   Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  registrations Registration[]
 
   @@id([tournamentId, categoryId])
   @@index([categoryId])
@@ -266,6 +293,7 @@ model Pairing {
   board         Int
   whitePlayerId String   @map("white_player_id") @db.Uuid
   blackPlayerId String?  @map("black_player_id") @db.Uuid
+  origin        PairingOrigin @default(MANUAL)
   isActive      Boolean  @default(true) @map("is_active")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -281,6 +309,34 @@ model Pairing {
   @@index([whitePlayerId])
   @@index([blackPlayerId])
   @@map("pairings")
+}
+
+// Inscripción de un jugador a un torneo en una categoría.
+model Registration {
+  id                    String             @id @default(uuid(7)) @db.Uuid
+  tournamentId          String             @map("tournament_id") @db.Uuid
+  categoryId            String             @map("category_id") @db.Uuid
+  playerId              String             @map("player_id") @db.Uuid
+  folio                 Int
+  status                RegistrationStatus @default(ACTIVE)
+  paymentStatus         PaymentStatus      @default(PENDING) @map("payment_status")
+  paymentConfirmedById  String?            @map("payment_confirmed_by_id") @db.Uuid
+  paymentConfirmedAt    DateTime?          @map("payment_confirmed_at") @db.Timestamptz(3)
+  cancelledById         String?            @map("cancelled_by_id") @db.Uuid
+  cancelledAt           DateTime?          @map("cancelled_at") @db.Timestamptz(3)
+  createdById           String?            @map("created_by_id") @db.Uuid
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  tournament         Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Restrict)
+  tournamentCategory TournamentCategory @relation(fields: [tournamentId, categoryId], references: [tournamentId, categoryId], onDelete: Restrict)
+  player             Player             @relation(fields: [playerId], references: [id], onDelete: Restrict)
+
+  @@unique([tournamentId, folio])
+  @@index([tournamentId, status])
+  @@index([playerId])
+  @@index([categoryId])
+  @@map("registrations")
 }
 
 model Game {
