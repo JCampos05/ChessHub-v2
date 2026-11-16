@@ -77,8 +77,8 @@ src/
   lib/           prisma, logger
   shared/        errores, validacion, paginacion
   middlewares/   autenticacion, limite de peticiones, errores
-  domain/        logica pura (coincidencia de nombres)
-  modules/       auth, users, players, categories, tournaments, rounds, pairings, games, health
+  domain/        logica pura (coincidencia de nombres, edad, cache, permisos, emparejamiento suizo, desempates)
+  modules/       auth, users, players, categories, tournaments, registrations, rounds, pairings, games, health
   app.ts         createApp()
   server.ts      arranque y cierre ordenado
 prisma/          esquema, migraciones y semilla
@@ -113,6 +113,23 @@ Cada recurso ofrece `GET /` (paginado), `POST /`, `GET /:id`, `PATCH /:id` y `DE
 | `/partidas` / `/games` | Resultado `PENDING` al crear; PGN y fecha opcionales |
 
 Los listados usan `page`, `limit`, `sortBy`, `order` e `includeInactive`. Los filtros con varios valores los reciben separados por coma (maximo 10, por ejemplo `estado=3,4`); un valor invalido responde 422. Una referencia a un registro inexistente en el cuerpo responde 400 `REFERENCE_NOT_FOUND`.
+
+### Inscripciones y generacion de rondas
+
+| Metodo y ruta | Permiso | Descripcion |
+|---|---|---|
+| `POST /api/v1/torneos/:id/inscripciones` | `registration:manage` | Inscribe a `{ playerId, categoryId }`; responde 201 con el folio |
+| `GET /api/v1/torneos/:id/inscripciones` | `registration:manage` | Lista paginada (por omision solo activas); filtros `status`, `paymentStatus`, `categoryId` |
+| `DELETE /api/v1/torneos/:id/inscripciones/:registrationId` | `registration:manage` | Cancela, libera el cupo y conserva el folio |
+| `PATCH /api/v1/torneos/:id/inscripciones/:registrationId/pago` | `payment:confirm` | Confirma el pago |
+| `POST /api/v1/torneos/:id/rondas/generar` | `round:manage` | Cierra la ronda anterior y genera la siguiente |
+
+Alias en ingles: `/tournaments/:id/registrations` y `/tournaments/:id/rounds/generate`. Los permisos se evaluan por rol y ambito del torneo.
+
+- **Cupo y folio:** se reservan con una sola sentencia condicional en la base; no se vende un cupo de mas ni se repite un folio aunque lleguen muchas peticiones a la vez. Errores de conflicto: `CAPACITY_FULL`, `ALREADY_REGISTERED`, `REGISTRATION_CLOSED`, `AGE_NOT_ELIGIBLE`.
+- **Generar ronda:** requiere al menos 2 inscripciones activas y que las partidas de la ronda anterior tengan resultado; la ronda anterior pasa a `FINISHED` y la nueva queda `IN_PROGRESS`, todo en una transaccion. Errores de conflicto: `NOT_ENOUGH_PLAYERS`, `PREVIOUS_ROUND_UNFINISHED`, `ROUNDS_COMPLETE`, `ROUND_DUPLICATE`, `NO_VALID_PAIRING`.
+- **Emparejamiento:** sistema suizo; ordena por puntaje, Buchholz, rating y folio; el jugador que queda solo en su grupo de puntaje baja al grupo mas cercano; nadie repite rival ni descansa dos veces; el balance de color se mantiene entre -2 y +2.
+- Los listados de inscripciones nunca incluyen telefono ni correo.
 
 ## Cache
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.0-e2.2]
+
+### Agregado
+- Inscripciones por torneo y categoria: `POST`, `GET`, `DELETE` y `PATCH …/pago` bajo `/torneos/:id/inscripciones` (alias `/tournaments/:id/registrations`; los campos aceptan `jugadorId` y `categoriaId`).
+- Cupo atomico: el cupo y el folio se reservan con una sola sentencia `UPDATE` condicional en la base, de modo que nunca se supera `max_players`; un fallo posterior revierte el cupo y el folio en la misma transaccion.
+- Folio consecutivo por torneo, unico y sin reutilizarse al cancelar; una sola inscripcion activa por jugador y torneo (indice unico parcial); cancelar libera el cupo y permite reinscribirse.
+- Elegibilidad: torneo en convocatoria, categoria vinculada, jugador no inactivo y edad cumplida a la fecha de inicio dentro del rango de la categoria.
+- Pago de la inscripcion (`PENDING` a `CONFIRMED`) con el permiso `payment:confirm`; el permiso `registration:manage` rige el alta, el listado y la cancelacion.
+- `POST /torneos/:id/rondas/generar` (alias `/tournaments/:id/rounds/generate`): cierra la ronda anterior y genera la siguiente en una sola transaccion con el torneo bloqueado; crea las mesas con origen `AUTO` y una partida pendiente por mesa.
+- Emparejamiento suizo puro y determinista (`domain/swiss`): grupos de puntaje, flotadores al grupo mas cercano, balance de color de -2 a +2 sin tres colores iguales seguidos, descanso (bye) unico por jugador, sin rivales repetidos y con tope de busqueda.
+- Buchholz basico (`domain/tiebreaks`) para ordenar dentro de cada grupo de puntaje.
+- Codigos de conflicto: `CAPACITY_FULL`, `ALREADY_REGISTERED`, `REGISTRATION_CLOSED`, `AGE_NOT_ELIGIBLE`, `CAPACITY_BELOW_REGISTERED`, `PAYMENT_ALREADY_CONFIRMED`, `REGISTRATION_CANCELLED`, `NOT_ENOUGH_PLAYERS`, `PREVIOUS_ROUND_UNFINISHED`, `ROUNDS_COMPLETE` y `NO_VALID_PAIRING`.
+- El torneo expone `registeredCount`; el emparejamiento expone `origin` (`MANUAL` o `AUTO`).
+- Migracion `registrations_and_rounds`: tabla `registrations`, contadores de cupo y folio en torneos con restricciones CHECK, y origen de las mesas.
+- Pruebas de concurrencia (20 peticiones por el ultimo cupo, 50 folios simultaneos, generaciones simultaneas) y de rollback con fallos forzados.
+
+### Cambiado
+- Un torneo no admite bajar `max_players` por debajo de las inscripciones activas.
+- El script `pnpm smoke` evalua el entregable e2.2.
+
 ## [0.2.0-e2.1]
 
 ### Agregado
