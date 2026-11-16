@@ -5,6 +5,8 @@ interface PairingRow {
   board: number;
   whitePlayerId: string;
   blackPlayerId: string | null;
+  // MANUAL: capturada con la API de emparejamientos; AUTO: generada con la ronda
+  origin: string;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -23,6 +25,7 @@ export function toPairingDto(pairing: PairingRow): PairingDto {
     whitePlayerId: pairing.whitePlayerId,
     blackPlayerId: pairing.blackPlayerId,
     isBye: pairing.blackPlayerId === null,
+    origin: pairing.origin,
     isActive: pairing.isActive,
     createdAt: pairing.createdAt,
     updatedAt: pairing.updatedAt,

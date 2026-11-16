@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { authenticate } from '../../middlewares/authenticate.js';
 import { authorize } from '../../middlewares/authorize.js';
 import { uuidParam, validateBody, validateQuery } from '../../shared/validate.js';
-import { tournamentFromParam } from './tournament.context.js';
+import { registrationRouter } from '../registrations/registration.routes.js';
+import { roundGenerationController } from '../rounds/round-generation.controller.js';
+import { authorizeOnTournament, tournamentFromParam } from './tournament.context.js';
 import { tournamentController } from './tournament.controller.js';
 import {
   createTournamentSchema,
@@ -19,6 +21,12 @@ tournamentRouter.post('/', authorize('tournament:create'), validateBody(createTo
 tournamentRouter.get('/:id', uuidParam('id'), tournamentController.getById);
 tournamentRouter.patch('/:id', uuidParam('id'), authorize('tournament:update', tournamentFromParam), validateBody(updateTournamentSchema), tournamentController.update );
 tournamentRouter.delete('/:id', uuidParam('id'), authorize('tournament:update', tournamentFromParam),tournamentController.remove );
+
+// Inscripciones del torneo
+tournamentRouter.use(['/:id/inscripciones', '/:id/registrations'], registrationRouter);
+
+// Cierre de la ronda anterior y generación de la siguiente
+tournamentRouter.post(['/:id/rondas/generar', '/:id/rounds/generate'], authorizeOnTournament('round:manage'), roundGenerationController.generate );
 
 // Categorías del torneo
 tournamentRouter.get(['/:id/categorias', '/:id/categories'], uuidParam('id'), tournamentController.listCategories);
