@@ -67,6 +67,29 @@ describe('can (RN-08)', () => {
     expect(can([federation('PLAYER')], 'tournament:update', { userId: USER, ownerId: USER })).toBe(false);
   });
 
+  it('RN-11: solo administración y tesorería confirman pagos; el organizador y el árbitro no', () => {
+    const ctx = { userId: USER, tournamentId: TOURNAMENT_A };
+    expect(can([federation('TREASURER')], 'payment:confirm', ctx)).toBe(true);
+    expect(can([federation('FEDERATION_ADMIN')], 'payment:confirm', ctx)).toBe(true);
+    expect(can([federation('ORGANIZER')], 'payment:confirm', ctx)).toBe(false);
+    expect(can([federation('CHIEF_ARBITER')], 'payment:confirm', ctx)).toBe(false);
+    expect(can([federation('PLAYER')], 'payment:confirm', ctx)).toBe(false);
+  });
+
+  it('RF15: inscribir lo hacen organización, administración y árbitro en jefe; el tesorero no', () => {
+    const ctx = { userId: USER, tournamentId: TOURNAMENT_A };
+    expect(can([federation('ORGANIZER')], 'registration:manage', ctx)).toBe(true);
+    expect(can([federation('CHIEF_ARBITER')], 'registration:manage', ctx)).toBe(true);
+    expect(can([federation('TREASURER')], 'registration:manage', ctx)).toBe(false);
+    expect(can([federation('ARBITER')], 'registration:manage', ctx)).toBe(false);
+  });
+
+  it('el ámbito de torneo limita la inscripción a ese torneo', () => {
+    const organizer = inTournament('ORGANIZER', TOURNAMENT_A);
+    expect(can([organizer], 'registration:manage', { userId: USER, tournamentId: TOURNAMENT_A })).toBe(true);
+    expect(can([organizer], 'registration:manage', { userId: USER, tournamentId: TOURNAMENT_B })).toBe(false);
+  });
+
   it('solo RATING_OFFICER y SUPER_ADMIN actualizan el rating', () => {
     expect(can([federation('RATING_OFFICER')], 'rating:update', { userId: USER })).toBe(true);
     expect(can([federation('FEDERATION_ADMIN')], 'rating:update', { userId: USER })).toBe(false);

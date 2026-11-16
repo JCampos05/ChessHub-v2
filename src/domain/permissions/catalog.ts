@@ -7,6 +7,8 @@ export const PERMISSIONS = [
   'rating:update',
   'round:manage',
   'game:manage',
+  'registration:manage',
+  'payment:confirm',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -20,14 +22,39 @@ export const ROLE_PERMISSIONS: Readonly<Record<string, readonly Permission[]>> =
     'player:manage',
     'round:manage',
     'game:manage',
+    'registration:manage',
+    'payment:confirm',
   ],
-  STATE_ADMIN: ['tournament:create', 'tournament:update', 'player:manage', 'round:manage', 'game:manage'],
-  MUNICIPAL_ADMIN: ['tournament:create', 'tournament:update', 'player:manage', 'round:manage', 'game:manage'],
-  ORGANIZER: ['tournament:create', 'tournament:update', 'player:manage', 'round:manage', 'game:manage'],
-  CHIEF_ARBITER: ['round:manage', 'game:manage'],
+  STATE_ADMIN: [
+    'tournament:create',
+    'tournament:update',
+    'player:manage',
+    'round:manage',
+    'game:manage',
+    'registration:manage',
+    'payment:confirm',
+  ],
+  MUNICIPAL_ADMIN: [
+    'tournament:create',
+    'tournament:update',
+    'player:manage',
+    'round:manage',
+    'game:manage',
+    'registration:manage',
+    'payment:confirm',
+  ],
+  ORGANIZER: [
+    'tournament:create',
+    'tournament:update',
+    'player:manage',
+    'round:manage',
+    'game:manage',
+    'registration:manage',
+  ],
+  CHIEF_ARBITER: ['round:manage', 'game:manage', 'registration:manage'],
   ARBITER: ['game:manage'],
   RATING_OFFICER: ['rating:update'],
-  TREASURER: [],
+  TREASURER: ['payment:confirm'],
   PLAYER: [],
 };
 
