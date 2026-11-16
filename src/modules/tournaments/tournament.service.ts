@@ -18,6 +18,9 @@ import { isFrozen, isRunning } from './tournament-status.js';
 const notEditable = () =>
   conflict('TOURNAMENT_NOT_EDITABLE', 'El torneo ya terminó o fue cancelado y no admite cambios');
 
+const belowRegistered = () =>
+  conflict('CAPACITY_BELOW_REGISTERED', 'El cupo no puede ser menor que el número de jugadores ya inscritos');
+
 async function requireTournament(id: string) {
   const tournament = await tournamentRepository.findById(id);
   if (!tournament) throw notFound('El torneo no existe');
@@ -69,12 +72,22 @@ export const tournamentService = {
       );
     }
 
+    // El cupo no puede quedar por debajo de lo ya inscrito
+    if (input.maxPlayers != null && input.maxPlayers < current.registeredCount) throw belowRegistered();
+
     const { startDate, endDate, ...rest } = input;
-    const updated = await tournamentRepository.update(id, {
-      ...rest,
-      ...(startDate === undefined ? {} : { startDate: toDateOnly(startDate) }),
-      ...(endDate === undefined ? {} : { endDate: toDateOnly(endDate) }),
-    });
+    let updated;
+    try {
+      updated = await tournamentRepository.update(id, {
+        ...rest,
+        ...(startDate === undefined ? {} : { startDate: toDateOnly(startDate) }),
+        ...(endDate === undefined ? {} : { endDate: toDateOnly(endDate) }),
+      });
+    } catch (error) {
+      // Una inscripción pudo entrar entre la lectura y la escritura: la restricción de la base lo impide
+      if (String(error).includes('tournaments_registered_count_cap_chk')) throw belowRegistered();
+      throw error;
+    }
     await cache.bump(TOURNAMENT_CACHE_RESOURCE);
     return toTournamentDto(updated);
   },

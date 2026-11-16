@@ -10,6 +10,7 @@ interface TournamentRow {
   endDate: Date;
   roundsPlanned: number | null;
   maxPlayers: number | null;
+  registeredCount: number;
   timeControl: string | null;
   status: string;
   isActive: boolean;
@@ -27,6 +28,8 @@ export interface TournamentDto {
   endDate: string;
   roundsPlanned: number | null;
   maxPlayers: number | null;
+  // Inscripciones activas (el cupo restante es maxPlayers - registeredCount)
+  registeredCount: number;
   timeControl: string | null;
   status: string;
   isActive: boolean;
@@ -45,6 +48,7 @@ export function toTournamentDto(tournament: TournamentRow): TournamentDto {
     endDate: fromDateOnly(tournament.endDate),
     roundsPlanned: tournament.roundsPlanned,
     maxPlayers: tournament.maxPlayers,
+    registeredCount: tournament.registeredCount,
     timeControl: tournament.timeControl,
     status: tournament.status,
     isActive: tournament.isActive,
