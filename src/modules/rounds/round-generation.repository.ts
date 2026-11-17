@@ -1,22 +1,11 @@
-import type { Prisma } from '../../generated/prisma/client.js';
-import { prisma } from '../../lib/prisma.js';
 import type { PlannedPairing } from '../../domain/swiss/pair.js';
+import { runWithTournamentLocked, type Tx } from '../tournaments/tournament-lock.js';
 
-export type Tx = Prisma.TransactionClient;
-
-const TX_OPTIONS = { maxWait: 15_000, timeout: 30_000 } as const;
+export type { Tx };
 
 export const roundGenerationRepository = {
-  // Ejecuta el trabajo dentro de una transacción con el torneo bloqueado: dos generaciones del mismo torneo
-  // se serializan y la segunda ve lo que dejó la primera. Prisma no tiene bloqueo explícito; escribir la fila del
-  // torneo toma su candado exclusivo hasta el commit (igual que FOR UPDATE) y bloquea también las inscripciones
-  // que intenten reservar cupo mientras se empareja
-  runLocked<T>(tournamentId: string, work: (tx: Tx) => Promise<T>): Promise<T> {
-    return prisma.$transaction(async (tx) => {
-      await tx.tournament.updateMany({ where: { id: tournamentId }, data: { updatedAt: new Date() } });
-      return work(tx);
-    }, TX_OPTIONS);
-  },
+  // Dos generaciones del mismo torneo se serializan con su candado (ver tournament-lock.ts)
+  runLocked: runWithTournamentLocked,
 
   findTournament(tx: Tx, id: string) {
     return tx.tournament.findUnique({ where: { id } });
