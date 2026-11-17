@@ -15,6 +15,9 @@ export default defineConfig({
       JWT_SECRET: 'secreto-de-pruebas-con-mas-de-32-caracteres',
       BCRYPT_COST: '4',
       REDIS_URL: '',
+      // Reintentos cortos para que las pruebas de la cola no esperen segundos
+      NOTIFICATION_ATTEMPTS: '3',
+      NOTIFICATION_BACKOFF_MS: '1',
       LOG_LEVEL: 'silent',
     },
     coverage: {

@@ -63,6 +63,54 @@ describe('parseEnv (C-40)', () => {
     expect(() => parseEnv({ ...base, [name]: value })).toThrow(name);
   });
 
+  describe('cola de notificaciones (RNF06)', () => {
+    it('[RNF06] aplica valores por omisión: trabajador integrado, 5 intentos, 1 s de espera y sin correo', () => {
+      const env = parseEnv(base);
+
+      expect(env.WORKER_ENABLED).toBe(true);
+      expect(env.NOTIFICATION_ATTEMPTS).toBe(5);
+      expect(env.NOTIFICATION_BACKOFF_MS).toBe(1000);
+      expect(env.MAIL_ENABLED).toBe(false);
+    });
+
+    it('[RNF06] convierte textos a booleanos y números', () => {
+      const env = parseEnv({
+        ...base,
+        WORKER_ENABLED: 'false',
+        NOTIFICATION_ATTEMPTS: '3',
+        NOTIFICATION_BACKOFF_MS: '250',
+        MAIL_ENABLED: 'true',
+      });
+
+      expect(env.WORKER_ENABLED).toBe(false);
+      expect(env.NOTIFICATION_ATTEMPTS).toBe(3);
+      expect(env.NOTIFICATION_BACKOFF_MS).toBe(250);
+      expect(env.MAIL_ENABLED).toBe(true);
+    });
+
+    it('[RNF06] los límites de intentos y espera son inclusivos', () => {
+      expect(parseEnv({ ...base, NOTIFICATION_ATTEMPTS: '1' }).NOTIFICATION_ATTEMPTS).toBe(1);
+      expect(parseEnv({ ...base, NOTIFICATION_ATTEMPTS: '20' }).NOTIFICATION_ATTEMPTS).toBe(20);
+      expect(parseEnv({ ...base, NOTIFICATION_BACKOFF_MS: '1' }).NOTIFICATION_BACKOFF_MS).toBe(1);
+      expect(parseEnv({ ...base, NOTIFICATION_BACKOFF_MS: '60000' }).NOTIFICATION_BACKOFF_MS).toBe(60_000);
+    });
+
+    it.each([
+      ['NOTIFICATION_ATTEMPTS', '0'],
+      ['NOTIFICATION_ATTEMPTS', '21'],
+      ['NOTIFICATION_ATTEMPTS', '2.5'],
+      ['NOTIFICATION_BACKOFF_MS', '0'],
+      ['NOTIFICATION_BACKOFF_MS', '-5'],
+      ['NOTIFICATION_BACKOFF_MS', '60001'],
+      ['NOTIFICATION_BACKOFF_MS', 'rapido'],
+      ['WORKER_ENABLED', 'si'],
+      ['WORKER_ENABLED', '1'],
+      ['MAIL_ENABLED', 'yes'],
+    ])('[RNF06] rechaza %s con valor inválido (%s)', (name, value) => {
+      expect(() => parseEnv({ ...base, [name]: value })).toThrow(name);
+    });
+  });
+
   it('trata las variables vacías como no definidas', () => {
     const env = parseEnv({ ...base, SMTP_USER: '', PORT: '' });
 

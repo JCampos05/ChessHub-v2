@@ -7,6 +7,13 @@ const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'
 const MIN_BCRYPT_COST = 12;
 const MAX_BCRYPT_COST = 15;
 
+// Solo 'true' o 'false': z.coerce.boolean() tomaría cualquier texto no vacío (incluido 'false') como verdadero
+const booleanFlag = (fallback: 'true' | 'false') =>
+  z
+    .enum(['true', 'false'])
+    .default(fallback)
+    .transform((value) => value === 'true');
+
 const envSchema = z.object({
     NODE_ENV: z.enum(NODE_ENVS).default('development'),
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
@@ -36,6 +43,13 @@ const envSchema = z.object({
       .optional(),
     CACHE_TTL_SECONDS: z.coerce.number().int().min(1).max(3600).default(60),
     CACHE_LRU_CAPACITY: z.coerce.number().int().min(10).max(100_000).default(500),
+
+    // Cola de notificaciones: el servidor arranca el consumidor salvo que se desactive (réplicas solo HTTP)
+    WORKER_ENABLED: booleanFlag('true'),
+    NOTIFICATION_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
+    NOTIFICATION_BACKOFF_MS: z.coerce.number().int().min(1).max(60_000).default(1000),
+    // El correo es adicional a la bandeja y solo sale con esta bandera
+    MAIL_ENABLED: booleanFlag('false'),
 
     SMTP_HOST: z.string().default('localhost'),
     SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1025),
