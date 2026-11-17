@@ -12,6 +12,9 @@ interface TournamentRow {
   maxPlayers: number | null;
   registeredCount: number;
   timeControl: string | null;
+  ratingSystem: string;
+  ratingPace: string;
+  ratingStateCode: string | null;
   status: string;
   isActive: boolean;
   createdAt: Date;
@@ -31,6 +34,10 @@ export interface TournamentDto {
   // Inscripciones activas (el cupo restante es maxPlayers - registeredCount)
   registeredCount: number;
   timeControl: string | null;
+  // Rating con el que se siembra y empareja
+  ratingSystem: string;
+  ratingPace: string;
+  ratingStateCode: string | null;
   status: string;
   isActive: boolean;
   createdAt: Date;
@@ -50,6 +57,9 @@ export function toTournamentDto(tournament: TournamentRow): TournamentDto {
     maxPlayers: tournament.maxPlayers,
     registeredCount: tournament.registeredCount,
     timeControl: tournament.timeControl,
+    ratingSystem: tournament.ratingSystem,
+    ratingPace: tournament.ratingPace,
+    ratingStateCode: tournament.ratingStateCode,
     status: tournament.status,
     isActive: tournament.isActive,
     createdAt: tournament.createdAt,

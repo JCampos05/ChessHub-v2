@@ -148,6 +148,7 @@ model Player {
   whiteGames    Game[]    @relation("GameWhite")
   blackGames    Game[]    @relation("GameBlack")
   registrations Registration[]
+  ratings       PlayerRating[]
 
   @@unique([nameKey, birthDate])
   @@index([nameKey])
@@ -206,6 +207,40 @@ enum PairingOrigin {
   @@map("pairing_origin")
 }
 
+enum RatingSystem {
+  FIDE
+  NATIONAL
+  STATE
+
+  @@map("rating_system")
+}
+
+enum RatingPace {
+  STANDARD
+  RAPID
+  BLITZ
+
+  @@map("rating_pace")
+}
+
+// Historial de ratings: solo se insertan versiones nuevas 
+model PlayerRating {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  playerId    String       @map("player_id") @db.Uuid
+  system      RatingSystem
+  pace        RatingPace
+  stateCode   String?      @map("state_code")
+  value       Decimal      @db.Decimal(6, 1)
+  validFrom   DateTime     @map("valid_from") @db.Date
+  createdById String?      @map("created_by_id") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Restrict)
+
+  @@index([playerId, system, pace, validFrom])
+  @@map("player_ratings")
+}
+
 model Category {
   id          String   @id @default(uuid(7)) @db.Uuid
   name        String
@@ -235,6 +270,10 @@ model Tournament {
   roundsPlanned Int?            @map("rounds_planned")
   maxPlayers   Int?             @map("max_players")
   timeControl  String?          @map("time_control")
+  // Rating con el que se siembra y empareja: sistema, ritmo y (solo estatal) estado
+  ratingSystem    RatingSystem  @default(FIDE) @map("rating_system")
+  ratingPace      RatingPace    @default(STANDARD) @map("rating_pace")
+  ratingStateCode String?       @map("rating_state_code")
   status       TournamentStatus @default(REGISTRATION_OPEN)
   registeredCount     Int       @default(0) @map("registered_count")
   registrationCounter Int       @default(0) @map("registration_counter")

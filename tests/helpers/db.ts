@@ -5,7 +5,7 @@ export async function resetDb(): Promise<void> {
   // La caché vive en el proceso: sin vaciarla, una prueba vería datos de la anterior
   memoryStore.clear();
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE registrations, games, pairings, rounds, tournament_categories, tournaments, categories, access_logs, sessions, user_roles, players, users RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE player_ratings, registrations, games, pairings, rounds, tournament_categories, tournaments, categories, access_logs, sessions, user_roles, players, users RESTART IDENTITY CASCADE',
   );
 }
 

@@ -1,3 +1,4 @@
+import { resolveRating, type RatingRecord } from '../../domain/ratings/resolve.js';
 import { NoValidPairingError, pairRound, type SwissPlayer } from '../../domain/swiss/pair.js';
 import type { PlayedPairing } from '../../domain/swiss/scores.js';
 import { conflict, notFound } from '../../shared/errors.js';
@@ -57,10 +58,39 @@ async function generate(tx: Tx, tournamentId: string): Promise<GeneratedRound> {
     }
   }
 
+  // El rating de siembra sale del sistema y ritmo que declara el torneo, con respaldo ordenado 
+  const ratingRows = await repo.findRatings(
+    tx,
+    registrations.map((r) => r.playerId),
+  );
+  const ratingsByPlayer = new Map<string, RatingRecord[]>();
+  for (const row of ratingRows) {
+    const list = ratingsByPlayer.get(row.playerId) ?? [];
+    list.push({
+      system: row.system,
+      pace: row.pace,
+      stateCode: row.stateCode,
+      value: Number(row.value),
+      validFrom: row.validFrom,
+    });
+    ratingsByPlayer.set(row.playerId, list);
+  }
+  const preference = {
+    system: tournament.ratingSystem,
+    pace: tournament.ratingPace,
+    stateCode: tournament.ratingStateCode,
+  };
+  const now = new Date();
+
   const players: SwissPlayer[] = registrations.map((r) => ({
     id: r.playerId,
     folio: r.folio,
-    rating: r.player.ratingElo === null ? null : Number(r.player.ratingElo),
+    rating: resolveRating(
+      ratingsByPlayer.get(r.playerId) ?? [],
+      preference,
+      now,
+      r.player.ratingElo === null ? null : Number(r.player.ratingElo),
+    )?.value ?? null,
   }));
 
   let planned;

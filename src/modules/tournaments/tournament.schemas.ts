@@ -3,6 +3,8 @@ import { withAliases } from '../../shared/aliases.js';
 import { calendarDateSchema } from '../../shared/dates.js';
 import { booleanQuery, listQueryShape, type ListQuery } from '../../shared/pagination.js';
 import { csvList } from '../../shared/query-lists.js';
+import { RATING_PACES, RATING_SYSTEMS } from '../../domain/ratings/resolve.js';
+import { stateCode } from '../ratings/rating.schemas.js';
 import { parseTournamentStatus, type TournamentStatusCode } from './tournament-status.js';
 
 const aliases = withAliases({
@@ -15,6 +17,9 @@ const aliases = withAliases({
   roundsPlanned: ['rondas', 'numRondas'],
   maxPlayers: ['cupo', 'maxJugadores'],
   timeControl: ['ritmo', 'controlTiempo'],
+  ratingSystem: ['sistemaRating'],
+  ratingPace: ['ritmoRating'],
+  ratingStateCode: ['estadoRating'],
 });
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -45,6 +50,10 @@ const fields = {
     .max(10_000, 'El cupo es demasiado alto')
     .nullable(),
   timeControl: optionalText(60),
+  // Rating con el que se siembra y empareja (P-41)
+  ratingSystem: z.enum(RATING_SYSTEMS, { error: 'El sistema de rating debe ser FIDE, NATIONAL o STATE' }),
+  ratingPace: z.enum(RATING_PACES, { error: 'El ritmo del rating debe ser STANDARD, RAPID o BLITZ' }),
+  ratingStateCode: stateCode.nullable(),
 };
 
 // Las fechas AAAA-MM-DD se comparan como texto
@@ -66,6 +75,9 @@ export const createTournamentSchema = z.preprocess(
       roundsPlanned: fields.roundsPlanned.optional(),
       maxPlayers: fields.maxPlayers.optional(),
       timeControl: fields.timeControl.optional(),
+      ratingSystem: fields.ratingSystem.optional(),
+      ratingPace: fields.ratingPace.optional(),
+      ratingStateCode: fields.ratingStateCode.optional(),
     })
     .refine(hasValidDateRange, dateRangeIssue),
 );
@@ -84,6 +96,9 @@ export const updateTournamentSchema = z.preprocess(
       roundsPlanned: fields.roundsPlanned.optional(),
       maxPlayers: fields.maxPlayers.optional(),
       timeControl: fields.timeControl.optional(),
+      ratingSystem: fields.ratingSystem.optional(),
+      ratingPace: fields.ratingPace.optional(),
+      ratingStateCode: fields.ratingStateCode.optional(),
     })
     .refine(hasValidDateRange, dateRangeIssue)
     .refine((value) => Object.keys(value).length > 0, 'Indica al menos un campo para actualizar'),

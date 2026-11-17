@@ -43,6 +43,11 @@ export const roundGenerationRepository = {
     });
   },
 
+  // Historial de ratings de los jugadores; la vigencia y el respaldo los resuelve el dominio
+  findRatings(tx: Tx, playerIds: string[]) {
+    return tx.playerRating.findMany({ where: { playerId: { in: playerIds } } });
+  },
+
   closeRound(tx: Tx, tournamentId: string, number: number) {
     return tx.round.update({
       where: { tournamentId_number: { tournamentId, number } },

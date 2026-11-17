@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate } from '../../middlewares/authenticate.js';
 import { authorize } from '../../middlewares/authorize.js';
 import { uuidParam, validateBody, validateQuery } from '../../shared/validate.js';
+import { ratingRouter } from '../ratings/rating.routes.js';
 import { playerController } from './player.controller.js';
 import { createPlayerSchema, listPlayersQuerySchema, updatePlayerSchema } from './player.schemas.js';
 
@@ -16,3 +17,5 @@ playerRouter.get('/:id', uuidParam('id'), playerController.getById);
 // El permiso se evalúa en el servicio según los campos que se modifican (perfil o rating)
 playerRouter.patch('/:id', uuidParam('id'), validateBody(updatePlayerSchema), playerController.update);
 playerRouter.delete('/:id', uuidParam('id'), authorize('player:manage'), playerController.remove);
+// Historial de ratings por sistema y ritmo (P-41)
+playerRouter.use('/:id/ratings', uuidParam('id'), ratingRouter);
