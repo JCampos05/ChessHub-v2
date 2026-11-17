@@ -1,4 +1,6 @@
-import { buchholz } from '../tiebreaks/buchholz.js';
+import { buildStats } from '../tiebreaks/stats.js';
+import { buchholzCriterion } from '../tiebreaks/type-tiebreaks.js';
+import { emptyStats } from '../tiebreaks/types.js';
 import { computeScores, type PlayedPairing } from './scores.js';
 
 export interface SwissPlayer {
@@ -118,6 +120,7 @@ function lastFloats(history: readonly PlayedPairing[]): Map<string, Float> {
 
 function buildEntries(input: PairRoundInput): Entry[] {
   const scores = computeScores(input.history);
+  const stats = buildStats(input.history);
   const floats = lastFloats(input.history);
   const ordered = [...input.history].sort((a, b) => a.roundNumber - b.roundNumber);
 
@@ -129,7 +132,7 @@ function buildEntries(input: PairRoundInput): Entry[] {
     const entry: Entry = {
       player,
       score: scores.get(player.id) ?? 0,
-      tiebreak: buchholz(player.id, input.history, scores),
+      tiebreak: buchholzCriterion(stats.get(player.id) ?? emptyStats(), scores),
       whites: 0,
       blacks: 0,
       last: [],

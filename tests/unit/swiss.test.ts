@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { NoValidPairingError, pairRound, type PlannedPairing, type SwissPlayer } from '../../src/domain/swiss/pair.js';
 import { computeScores, type GameOutcome, type PlayedPairing } from '../../src/domain/swiss/scores.js';
-import { buchholz } from '../../src/domain/tiebreaks/buchholz.js';
+import { buildStats } from '../../src/domain/tiebreaks/stats.js';
+import { buchholzCriterion } from '../../src/domain/tiebreaks/type-tiebreaks.js';
+import { emptyStats } from '../../src/domain/tiebreaks/types.js';
 
 const played = (
   roundNumber: number,
@@ -39,16 +41,18 @@ describe('Buchholz básico (RF16)', () => {
     played(2, 'B', 'D', 'WHITE_WINS'),
   ];
   const scores = computeScores(history);
+  const stats = buildStats(history);
+  const buchholz = (id: string) => buchholzCriterion(stats.get(id) ?? emptyStats(), scores);
 
   it('suma los puntajes de los rivales enfrentados', () => {
-    expect(buchholz('A', history, scores)).toBe(1.5); // B 1 + C 0.5
-    expect(buchholz('B', history, scores)).toBe(2.5); // A 2 + D 0.5
-    expect(buchholz('C', history, scores)).toBe(2.5); // D 0.5 + A 2
+    expect(buchholz('A')).toBe(1.5); // B 1 + C 0.5
+    expect(buchholz('B')).toBe(2.5); // A 2 + D 0.5
+    expect(buchholz('C')).toBe(2.5); // D 0.5 + A 2
   });
 
   it('el descanso no suma y quien no jugó rivales vale 0', () => {
-    expect(buchholz('E', history, scores)).toBe(0);
-    expect(buchholz('Z', history, scores)).toBe(0);
+    expect(buchholz('E')).toBe(0);
+    expect(buchholz('Z')).toBe(0);
   });
 });
 
