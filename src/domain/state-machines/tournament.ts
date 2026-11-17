@@ -20,6 +20,8 @@ const LABELS: Readonly<Record<TournamentState, string>> = {
   CANCELLED: 'cancelado',
 };
 
+export const stateLabel = (state: TournamentState): string => LABELS[state];
+
 // Transiciones permitidas; los estados finales no tienen salida
 const TRANSITIONS: Readonly<Record<TournamentState, readonly TournamentState[]>> = {
   REGISTRATION_OPEN: ['REGISTRATION_CLOSED', 'CANCELLED'],
