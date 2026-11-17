@@ -1,14 +1,8 @@
-// Estados del torneo en el orden del ciclo de vida
-export const TOURNAMENT_STATUSES = [
-  'REGISTRATION_OPEN',
-  'REGISTRATION_CLOSED',
-  'IN_PROGRESS',
-  'ROUND_IN_PROGRESS',
-  'FINISHED',
-  'CANCELLED',
-] as const;
+import { TOURNAMENT_STATUSES, type TournamentState } from '../../domain/state-machines/tournament.js';
 
-export type TournamentStatusCode = (typeof TOURNAMENT_STATUSES)[number];
+// Los estados viven en el dominio (máquina de estados); aquí se reexportan para el resto del módulo
+export { TOURNAMENT_STATUSES };
+export type TournamentStatusCode = TournamentState;
 
 const SPANISH_NAMES: Readonly<Record<string, TournamentStatusCode>> = {
   convocatoria: 'REGISTRATION_OPEN',
