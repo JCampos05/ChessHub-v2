@@ -31,6 +31,16 @@ async function generate(tx: Tx, tournamentId: string): Promise<GeneratedRound> {
   if (isFrozen(tournament.status)) {
     throw conflict('TOURNAMENT_NOT_EDITABLE', 'El torneo ya terminó o fue cancelado y no admite cambios');
   }
+  // Las rondas solo se generan con el torneo en juego; ROUND_IN_PROGRESS exige cerrar antes la ronda abierta
+  if (tournament.status === 'ROUND_IN_PROGRESS') {
+    throw conflict(
+      'TOURNAMENT_NOT_IN_PROGRESS',
+      'El torneo tiene una ronda en curso; ciérrala (todas sus partidas con resultado) antes de generar la siguiente',
+    );
+  }
+  if (tournament.status !== 'IN_PROGRESS') {
+    throw conflict('TOURNAMENT_NOT_IN_PROGRESS', 'El torneo aún no inicia; ponlo en juego antes de generar rondas');
+  }
 
   const rounds = await repo.findRounds(tx, tournamentId);
   const last = rounds.find((r) => r.isActive);

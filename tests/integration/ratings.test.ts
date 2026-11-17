@@ -4,7 +4,7 @@ import { createApp } from '../../src/app.js';
 import { bearer, sessionWithRole } from '../helpers/auth.js';
 import { prisma, resetDb } from '../helpers/db.js';
 import { makePlayer } from '../helpers/factories.js';
-import { enrollPlayers, makeTournamentWithCategory } from '../helpers/registrations.js';
+import { enrollPlayers, makeTournamentWithCategory, startTournament } from '../helpers/registrations.js';
 
 const app = createApp();
 const MISSING = '0190aaaa-0000-7000-8000-000000000099';
@@ -281,6 +281,7 @@ describe('ratings por sistema y ritmo (P-41)', () => {
     it('sin ratings nuevos siembra con la columna anterior (compatibilidad)', async () => {
       const { tournament, category } = await makeTournamentWithCategory();
       const players = await enrollPlayers(tournament.id, category.id, 4);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
 
       const res = await generate(token, tournament.id).expect(201);
@@ -290,6 +291,7 @@ describe('ratings por sistema y ritmo (P-41)', () => {
     it('usa el sistema que declara el torneo', async () => {
       const { tournament, category } = await makeTournamentWithCategory({ ratingSystem: 'NATIONAL' });
       const players = await enrollPlayers(tournament.id, category.id, 4);
+      await startTournament(tournament.id);
       await reverseRatings(players, 'NATIONAL', 'STANDARD');
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
 
@@ -301,6 +303,7 @@ describe('ratings por sistema y ritmo (P-41)', () => {
     it('usa el ritmo que declara el torneo e ignora la columna anterior', async () => {
       const { tournament, category } = await makeTournamentWithCategory({ ratingPace: 'RAPID' });
       const players = await enrollPlayers(tournament.id, category.id, 4);
+      await startTournament(tournament.id);
       await reverseRatings(players, 'FIDE', 'RAPID');
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
 
@@ -311,6 +314,7 @@ describe('ratings por sistema y ritmo (P-41)', () => {
     it('respalda en otro sistema del mismo ritmo cuando falta el preferido', async () => {
       const { tournament, category } = await makeTournamentWithCategory({ ratingSystem: 'FIDE' });
       const players = await enrollPlayers(tournament.id, category.id, 4);
+      await startTournament(tournament.id);
       await reverseRatings(players, 'NATIONAL', 'STANDARD');
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
 
@@ -321,6 +325,7 @@ describe('ratings por sistema y ritmo (P-41)', () => {
     it('un rating con vigencia futura no se usa', async () => {
       const { tournament, category } = await makeTournamentWithCategory();
       const players = await enrollPlayers(tournament.id, category.id, 4);
+      await startTournament(tournament.id);
       await prisma.playerRating.createMany({
         data: players.map((player, index) => ({
           playerId: player.id,

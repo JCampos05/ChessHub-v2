@@ -5,7 +5,12 @@ import { roundGenerationRepository } from '../../src/modules/rounds/round-genera
 import { bearer, sessionWithRole } from '../helpers/auth.js';
 import { prisma, resetDb } from '../helpers/db.js';
 import { makePlayer } from '../helpers/factories.js';
-import { enrollPlayers, finishRoundGames, makeTournamentWithCategory } from '../helpers/registrations.js';
+import {
+  enrollPlayers,
+  finishRoundGames,
+  makeTournamentWithCategory,
+  startTournament,
+} from '../helpers/registrations.js';
 
 const app = createApp();
 const LONG = 60_000;
@@ -118,9 +123,10 @@ describe('concurrencia y atomicidad', () => {
     it('RF17: cinco generaciones simultáneas de la misma ronda dan una sola respuesta 201', async () => {
       const { tournament, category } = await makeTournamentWithCategory();
       await enrollPlayers(tournament.id, category.id, 8);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
 
-      const responses = await Promise.all(Array.from({ length: 5 }, () => generate(token, tournament.id)));
+      const responses =await Promise.all(Array.from({ length: 5 }, () => generate(token, tournament.id)));
 
       expect(responses.filter((r) => r.status === 201)).toHaveLength(1);
       const rejected = responses.filter((r) => r.status !== 201);
@@ -132,29 +138,39 @@ describe('concurrencia y atomicidad', () => {
       expect(await prisma.game.count({ where: { tournamentId: tournament.id } })).toBe(4);
     }, LONG);
 
-    it('generar mientras se inscribe no deja una ronda con jugadores a medias', async () => {
+    it('generar y cancelar una inscripción a la vez no deja una ronda con jugadores a medias', async () => {
       const { tournament, category } = await makeTournamentWithCategory();
-      await enrollPlayers(tournament.id, category.id, 6);
+      const players = await enrollPlayers(tournament.id, category.id, 8);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
-      const late = await Promise.all(Array.from({ length: 4 }, () => makePlayer()));
+      const toCancel = await prisma.registration.findMany({
+        where: { tournamentId: tournament.id, folio: { in: [7, 8] } },
+        select: { id: true },
+      });
 
-      const [gen] = await Promise.all([
+      const [gen, ...cancels] = await Promise.all([
         generate(token, tournament.id),
-        ...late.map((p) => register(token, tournament.id, p.id, category.id)),
+        ...toCancel.map((r) =>
+          request(app)
+            .delete(`/api/v1/torneos/${tournament.id}/inscripciones/${r.id}`)
+            .set(...bearer(token)),
+        ),
       ]);
 
       expect(gen.status).toBe(201);
-      // Cada jugador de la ronda aparece una sola vez, y solo hay inscritos activos
+      expect(cancels.every((c) => c.status < 300)).toBe(true);
+      // Cada jugador aparece una sola vez; la ronda ve las inscripciones antes o después de cada cancelación, nunca a medias
       const ids = (gen.body.pairings as { whitePlayerId: string; blackPlayerId: string | null }[]).flatMap((p) =>
         p.blackPlayerId === null ? [p.whitePlayerId] : [p.whitePlayerId, p.blackPlayerId],
       );
       expect(new Set(ids).size).toBe(ids.length);
-      const registered = new Set(
-        (await prisma.registration.findMany({ where: { tournamentId: tournament.id, status: 'ACTIVE' } })).map(
-          (r) => r.playerId,
-        ),
-      );
-      expect(ids.every((id) => registered.has(id))).toBe(true);
+      const stillActive = (
+        await prisma.registration.findMany({ where: { tournamentId: tournament.id, status: 'ACTIVE' } })
+      ).map((r) => r.playerId);
+      expect(stillActive).toHaveLength(6);
+      expect(stillActive.every((id) => ids.includes(id))).toBe(true);
+      const enrolled = new Set(players.map((p) => p.id));
+      expect(ids.every((id) => enrolled.has(id))).toBe(true);
     }, LONG);
   });
 
@@ -162,6 +178,7 @@ describe('concurrencia y atomicidad', () => {
     it('un fallo al crear una mesa de la ronda 1 no deja ronda, mesas ni partidas', async () => {
       const { tournament, category } = await makeTournamentWithCategory();
       await enrollPlayers(tournament.id, category.id, 8);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
 
       const original = roundGenerationRepository.createPairing;
@@ -190,6 +207,7 @@ describe('concurrencia y atomicidad', () => {
     it('un fallo en la ronda 2 deja la ronda 1 sin cerrar y sin ronda 2', async () => {
       const { tournament, category } = await makeTournamentWithCategory();
       await enrollPlayers(tournament.id, category.id, 8);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
       await generate(token, tournament.id).expect(201);
       await finishRoundGames(tournament.id, 1);

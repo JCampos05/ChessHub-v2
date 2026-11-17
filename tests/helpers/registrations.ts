@@ -30,6 +30,11 @@ export async function enrollPlayers(tournamentId: string, categoryId: string, co
   return players;
 }
 
+// Pone el torneo en juego (la generación de rondas lo exige). Escribe con Prisma para no depender de la ruta de estados
+export function startTournament(tournamentId: string) {
+  return prisma.tournament.update({ where: { id: tournamentId }, data: { status: 'IN_PROGRESS' } });
+}
+
 // Da resultado a todas las partidas pendientes de una ronda (blancas ganan)
 export function finishRoundGames(tournamentId: string, roundNumber: number) {
   return prisma.game.updateMany({

@@ -4,7 +4,12 @@ import { createApp } from '../../src/app.js';
 import { bearer, grantScopedRole, sessionWithRole } from '../helpers/auth.js';
 import { prisma, resetDb } from '../helpers/db.js';
 import { makeRound } from '../helpers/factories.js';
-import { enrollPlayers, finishRoundGames, makeTournamentWithCategory } from '../helpers/registrations.js';
+import {
+  enrollPlayers,
+  finishRoundGames,
+  makeTournamentWithCategory,
+  startTournament,
+} from '../helpers/registrations.js';
 
 const app = createApp();
 const MISSING = '0190aaaa-0000-7000-8000-000000000099';
@@ -42,6 +47,8 @@ describe('generar ronda (RF16, RF17, RN-04)', () => {
       const other = await makeTournamentWithCategory();
       await enrollPlayers(mine.tournament.id, mine.category.id, 4);
       await enrollPlayers(other.tournament.id, other.category.id, 4);
+      await startTournament(mine.tournament.id);
+      await startTournament(other.tournament.id);
       const { token, user } = await sessionWithRole(app);
       await grantScopedRole(user.id, 'CHIEF_ARBITER', 'TOURNAMENT', mine.tournament.id);
 
@@ -62,6 +69,7 @@ describe('generar ronda (RF16, RF17, RN-04)', () => {
     it('201: crea la ronda en curso con mesas AUTO y una partida pendiente por mesa', async () => {
       const { tournament, category } = await makeTournamentWithCategory();
       const players = await enrollPlayers(tournament.id, category.id, 8);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
 
       const res = await generate(token, tournament.id).expect(201);
@@ -84,6 +92,7 @@ describe('generar ronda (RF16, RF17, RN-04)', () => {
     it('con número impar crea un descanso sin partida', async () => {
       const { tournament, category } = await makeTournamentWithCategory();
       const players = await enrollPlayers(tournament.id, category.id, 9);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
 
       const res = await generate(token, tournament.id).expect(201);
@@ -101,6 +110,7 @@ describe('generar ronda (RF16, RF17, RN-04)', () => {
         where: { tournamentId: tournament.id, folio: { in: [3, 4] } },
         data: { status: 'CANCELLED' },
       });
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
 
       const res = await generate(token, tournament.id).expect(201);
@@ -108,10 +118,10 @@ describe('generar ronda (RF16, RF17, RN-04)', () => {
     });
 
     it('409 NOT_ENOUGH_PLAYERS con menos de 2 inscripciones activas y no crea nada', async () => {
-      const { tournament, category } = await makeTournamentWithCategory();
+      const { tournament, category } = await makeTournamentWithCategory({ status: 'IN_PROGRESS' });
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
 
-      const none = await generate(token, tournament.id).expect(409);
+      const none =await generate(token, tournament.id).expect(409);
       expect(none.body.code).toBe('NOT_ENOUGH_PLAYERS');
 
       await enrollPlayers(tournament.id, category.id, 1);
@@ -132,6 +142,7 @@ describe('generar ronda (RF16, RF17, RN-04)', () => {
     it('409 PREVIOUS_ROUND_UNFINISHED con partidas sin resultado y nada cambia', async () => {
       const { tournament, category } = await makeTournamentWithCategory();
       await enrollPlayers(tournament.id, category.id, 4);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
       await generate(token, tournament.id).expect(201);
 
@@ -146,8 +157,9 @@ describe('generar ronda (RF16, RF17, RN-04)', () => {
     it('con todas las partidas resueltas cierra la ronda 1 y abre la 2 sin repetir rivales', async () => {
       const { tournament, category } = await makeTournamentWithCategory();
       await enrollPlayers(tournament.id, category.id, 8);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
-      const first = await generate(token, tournament.id).expect(201);
+      const first =await generate(token, tournament.id).expect(201);
       await finishRoundGames(tournament.id, 1);
 
       const second = await generate(token, tournament.id).expect(201);
@@ -170,6 +182,7 @@ describe('generar ronda (RF16, RF17, RN-04)', () => {
     it('409 ROUNDS_COMPLETE cuando ya están todas las rondas planeadas', async () => {
       const { tournament, category } = await makeTournamentWithCategory({ roundsPlanned: 1 });
       await enrollPlayers(tournament.id, category.id, 4);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
       await generate(token, tournament.id).expect(201);
       await finishRoundGames(tournament.id, 1);
@@ -181,6 +194,7 @@ describe('generar ronda (RF16, RF17, RN-04)', () => {
     it('409 ROUND_DUPLICATE si el número siguiente lo ocupa una ronda inactiva', async () => {
       const { tournament, category } = await makeTournamentWithCategory();
       await enrollPlayers(tournament.id, category.id, 4);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
       await generate(token, tournament.id).expect(201);
       await finishRoundGames(tournament.id, 1);
@@ -194,10 +208,50 @@ describe('generar ronda (RF16, RF17, RN-04)', () => {
       const { tournament, category } = await makeTournamentWithCategory();
       await enrollPlayers(tournament.id, category.id, 4);
       await makeRound(tournament.id, 1);
+      await startTournament(tournament.id);
       const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
 
       const res = await generate(token, tournament.id).expect(409);
       expect(res.body.code).toBe('PREVIOUS_ROUND_UNFINISHED');
+    });
+  });
+
+  describe('estado del torneo (RF19, P-44)', () => {
+    it.each(['REGISTRATION_OPEN', 'REGISTRATION_CLOSED'] as const)(
+      '409 TOURNAMENT_NOT_IN_PROGRESS en %s: aún no inicia y no crea nada',
+      async (status) => {
+        const { tournament, category } = await makeTournamentWithCategory({ status });
+        await enrollPlayers(tournament.id, category.id, 4);
+        const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
+
+        const res = await generate(token, tournament.id).expect(409);
+
+        expect(res.body.code).toBe('TOURNAMENT_NOT_IN_PROGRESS');
+        expect(res.body.message).toMatch(/aún no inicia/);
+        expect(await prisma.round.count({ where: { tournamentId: tournament.id } })).toBe(0);
+      },
+    );
+
+    it('409 TOURNAMENT_NOT_IN_PROGRESS en ROUND_IN_PROGRESS con mensaje de ronda en curso', async () => {
+      const { tournament, category } = await makeTournamentWithCategory({ status: 'ROUND_IN_PROGRESS' });
+      await enrollPlayers(tournament.id, category.id, 4);
+      const { token } = await sessionWithRole(app, 'CHIEF_ARBITER');
+
+      const res = await generate(token, tournament.id).expect(409);
+
+      expect(res.body.code).toBe('TOURNAMENT_NOT_IN_PROGRESS');
+      expect(res.body.message).toMatch(/ronda en curso/);
+      expect(await prisma.round.count({ where: { tournamentId: tournament.id } })).toBe(0);
+    });
+
+    it.each(['FINISHED', 'CANCELLED'] as const)('los estados finales siguen en TOURNAMENT_NOT_EDITABLE (%s)', async (status) => {
+      const { tournament, category } = await makeTournamentWithCategory({ status });
+      await enrollPlayers(tournament.id, category.id, 4);
+      const { token } = await sessionWithRole(app, 'FEDERATION_ADMIN');
+
+      const res = await generate(token, tournament.id).expect(409);
+
+      expect(res.body.code).toBe('TOURNAMENT_NOT_EDITABLE');
     });
   });
 });

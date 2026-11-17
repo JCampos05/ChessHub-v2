@@ -50,9 +50,11 @@ model User {
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  roles      UserRole[]
-  sessions   Session[]
-  accessLogs AccessLog[]
+  roles         UserRole[]
+  sessions      Session[]
+  accessLogs    AccessLog[]
+  stateChanges  StateChange[]
+  notifications Notification[]
 
   @@map("users")
 }
@@ -205,6 +207,12 @@ enum PairingOrigin {
   AUTO
 
   @@map("pairing_origin")
+}
+
+enum StateEntityType {
+  TOURNAMENT
+
+  @@map("state_entity_type")
 }
 
 enum RatingSystem {
@@ -401,4 +409,41 @@ model Game {
   @@index([whitePlayerId])
   @@index([blackPlayerId])
   @@map("games")
+}
+
+// Historial de cambios de estado: solo se insertan filas. La entidad no lleva clave foránea porque es polimórfica
+model StateChange {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  entityType  StateEntityType @map("entity_type")
+  entityId    String          @map("entity_id") @db.Uuid
+  fromState   String          @map("from_state")
+  toState     String          @map("to_state")
+  changedById String?         @map("changed_by_id") @db.Uuid
+  reason      String?
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  changedBy User? @relation(fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId, createdAt(sort: Desc)])
+  @@map("state_changes")
+}
+
+// Bandeja de notificaciones de cada usuario; dedupeKey hace idempotente al trabajador que las crea
+model Notification {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  type      String
+  title     String
+  body      String
+  data      Json      @default("{}")
+  dedupeKey String    @map("dedupe_key")
+  readAt    DateTime? @map("read_at") @db.Timestamptz(3)
+  emailedAt DateTime? @map("emailed_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
 }
