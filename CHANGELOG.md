@@ -1,5 +1,18 @@
 # Changelog
 
+## [Sin publicar]
+
+### Agregado
+- Ratings por sistema (FIDE, nacional y estatal) y ritmo (estandar, rapido y blitz) con historial de solo insercion: `GET` y `POST /jugadores/:id/ratings` (alias `/players/:id/ratings`). Lectura para cualquier usuario autenticado; el alta requiere el permiso `rating:update`.
+- El torneo declara el rating con el que se siembra y empareja: `ratingSystem` (FIDE por omision), `ratingPace` (STANDARD por omision) y `ratingStateCode`. Si falta el valor preferido se respalda en FIDE, nacional y estatal del mismo ritmo, y en ritmo estandar en la columna `ratingElo`.
+- Desempates puros en `domain/tiebreaks`: Buchholz, Buchholz corte 1, Buchholz mediano 1, Sonneborn-Berger, victorias, victorias con negras, enfrentamiento directo y puntaje progresivo, con orden configurable y posiciones compartidas (`rankStandings`).
+- Codigo de conflicto `RATING_DUPLICATE`.
+- Migracion `player_ratings`: tabla de ratings con restricciones CHECK e indice unico por version, y preferencia de rating en torneos.
+- Integracion continua con GitHub Actions: tipos, pruebas con cobertura contra PostgreSQL 16, compilacion y construccion de la imagen de Docker en cada push, etiqueta y pull request.
+
+### Cambiado
+- La generacion de rondas siembra con el rating configurado en el torneo en lugar de solo la columna `ratingElo`.
+
 ## [0.2.0-e2.2]
 
 ### Agregado

@@ -69,6 +69,10 @@ Las migraciones se aplican solas al iniciar `pnpm test`.
 
 La prueba de rendimiento (`tests/integration/read-performance.test.ts`) carga 50 000 jugadores y 5 000 torneos y tarda alrededor de 35 segundos.
 
+### Integracion continua
+
+El flujo `.github/workflows/ci.yml` se ejecuta en cada push, etiqueta `v*` y pull request: levanta PostgreSQL 16, instala con `pnpm install --frozen-lockfile`, genera el cliente de Prisma y corre `pnpm typecheck`, `pnpm test:cov` (umbral global de 70 %) y `pnpm build`; ademas construye la imagen de Docker. Para reproducirlo en local basta con `pnpm typecheck && pnpm test:cov && pnpm build`.
+
 ## Estructura
 
 ```
@@ -130,6 +134,19 @@ Alias en ingles: `/tournaments/:id/registrations` y `/tournaments/:id/rounds/gen
 - **Generar ronda:** requiere al menos 2 inscripciones activas y que las partidas de la ronda anterior tengan resultado; la ronda anterior pasa a `FINISHED` y la nueva queda `IN_PROGRESS`, todo en una transaccion. Errores de conflicto: `NOT_ENOUGH_PLAYERS`, `PREVIOUS_ROUND_UNFINISHED`, `ROUNDS_COMPLETE`, `ROUND_DUPLICATE`, `NO_VALID_PAIRING`.
 - **Emparejamiento:** sistema suizo; ordena por puntaje, Buchholz, rating y folio; el jugador que queda solo en su grupo de puntaje baja al grupo mas cercano; nadie repite rival ni descansa dos veces; el balance de color se mantiene entre -2 y +2.
 - Los listados de inscripciones nunca incluyen telefono ni correo.
+
+### Ratings por sistema y ritmo
+
+| Metodo y ruta | Permiso | Descripcion |
+|---|---|---|
+| `GET /api/v1/jugadores/:id/ratings` | autenticado | Historial paginado, del mas reciente al mas antiguo; filtros `system` y `pace` |
+| `POST /api/v1/jugadores/:id/ratings` | `rating:update` | Agrega una version `{ system, pace, value, stateCode?, validFrom? }`; responde 201 |
+
+Alias en ingles: `/players/:id/ratings`.
+
+- **Sistemas y ritmos:** `FIDE`, `NATIONAL` y `STATE` (este ultimo lleva `stateCode`, de 2 a 5 letras) en `STANDARD`, `RAPID` y `BLITZ`. El historial solo crece: corregir un valor es registrar otro con vigencia posterior. Un duplicado exacto responde 409 `RATING_DUPLICATE`.
+- **Rating del torneo:** `ratingSystem` (por omision `FIDE`), `ratingPace` (`STANDARD`) y `ratingStateCode` indican con que rating se siembra y empareja. Si el jugador no tiene el preferido se usa FIDE, luego nacional y luego estatal del mismo ritmo; en ritmo estandar, como ultimo recurso, la columna `ratingElo`.
+- **Desempates:** `domain/tiebreaks` incluye Buchholz, corte 1, mediano 1, Sonneborn-Berger, victorias, victorias con negras, enfrentamiento directo y progresivo; `rankStandings` los aplica en el orden que se le indique.
 
 ## Cache
 

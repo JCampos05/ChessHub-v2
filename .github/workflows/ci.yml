@@ -1,0 +1,112 @@
+name: CI
+
+# Verifica en cada cambio lo mismo que se corre en local: tipos, pruebas contra PostgreSQL real y compilacion.
+# El mismo archivo sirve si el proyecto esta en la raiz del repositorio o dentro de la carpeta Backend.
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PNPM_VERSION: 10.33.2
+  NODE_VERSION: 22
+
+jobs:
+  test:
+    name: Tipos, pruebas y compilacion
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: chesshub
+          POSTGRES_PASSWORD: chesshub
+          POSTGRES_DB: chesshub_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U chesshub -d chesshub_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Misma URL que usan las pruebas (tests/global-setup.ts y vitest.config.ts)
+      DATABASE_URL: postgresql://chesshub:chesshub@localhost:5432/chesshub_test
+
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v4
+
+      - name: Ubicar el proyecto
+        id: project
+        run: |
+          if [ -f Backend/package.json ]; then
+            echo "dir=Backend" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Instalar pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: ${{ steps.project.outputs.dir }}/pnpm-lock.yaml
+
+      - name: Instalar dependencias
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Generar el cliente de Prisma
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: pnpm exec prisma generate
+
+      - name: Comprobar tipos
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: pnpm typecheck
+
+      - name: Pruebas con cobertura
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: pnpm test:cov
+
+      - name: Compilar
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: pnpm build
+
+  docker:
+    name: Imagen de Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v4
+
+      - name: Ubicar el proyecto
+        id: project
+        run: |
+          if [ -f Backend/Dockerfile ]; then
+            echo "dir=Backend" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Construir la imagen
+        working-directory: ${{ steps.project.outputs.dir }}
+        run: docker build --tag chesshub-backend:ci .
