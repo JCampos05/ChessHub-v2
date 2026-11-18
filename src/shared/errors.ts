@@ -37,5 +37,9 @@ export const conflict = (code: string, message: string) => new AppError(409, cod
 export const unprocessable = (message: string, errors?: FieldError[]) =>
   new AppError(422, 'UNPROCESSABLE_ENTITY', message, errors);
 
+// La cola de notificaciones no acepta trabajos (Redis caído o cola cerrada): la operación se revierte y se puede reintentar
+export const queueUnavailable = () =>
+  new AppError(503, 'QUEUE_UNAVAILABLE', 'No se pudo registrar la notificación del cambio; intenta de nuevo en un momento');
+
 export const tooManyRequests = (code: string, message: string, retryAfterSeconds: number) =>
   new AppError(429, code, message, undefined, { 'Retry-After': String(retryAfterSeconds) });
