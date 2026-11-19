@@ -1,8 +1,21 @@
 # Changelog
 
-## [Sin publicar]
+## [0.3.0-e3.1]
 
 ### Agregado
+- Maquina de estados del torneo (`domain/state-machines`): convocatoria, inscripciones cerradas, en juego, ronda en curso, finalizado y cancelado, con las transiciones validas y sus condiciones (al menos 2 inscritos para iniciar, una ronda con mesas para ponerla en curso, partidas con resultado para cerrarla y rondas terminadas para finalizar). Finalizado y cancelado no tienen salida.
+- `PATCH /torneos/:id/estado` (alias `/tournaments/:id/status`) con `{ estado, motivo? }`, donde el estado puede ir como codigo, nombre en espanol o numero del ciclo, y las rutas por nombre `/convocatoria`, `/inscripciones_cerradas`, `/en_juego`, `/ronda_en_curso`, `/finalizado` y `/cancelado`. Requieren `tournament:update` sobre el torneo.
+- `GET /torneos/:id/historial-estados` (alias `/status-history`): cambios de estado paginados, del mas reciente al mas antiguo, con actor y motivo.
+- La transicion se aplica en una sola transaccion con el torneo bloqueado: estado, efecto sobre la ronda (inicio o cierre), historial y encolado del aviso. Veinte peticiones simultaneas a la misma transicion dan un solo 200.
+- Notificaciones: `GET /notificaciones` (alias `/notifications`, filtro `leida`), `GET /notificaciones/unread-count`, `PATCH /notificaciones/:id/leida` y `PATCH /notificaciones/leer-todas`. Solo se ven y modifican las propias; una ajena responde 404.
+- Cola de notificaciones: BullMQ sobre Redis cuando hay `REDIS_URL` y cola en memoria sin ella. El trabajo se encola dentro de la transaccion; si la cola no responde en 2 s, la transaccion se revierte y la API responde 503 `QUEUE_UNAVAILABLE`. El consumidor es idempotente (reintentos con espera exponencial, sin filas ni correos duplicados) y avisa al creador del torneo y a quien tiene un rol con ambito de ese torneo.
+- Correo opcional de cada aviso con Nodemailer (`MAIL_ENABLED`, `SMTP_*`).
+- Consumidor integrado en el servidor (`WORKER_ENABLED`) y proceso independiente con `pnpm worker` y `pnpm worker:start`; cierre ordenado antes de Redis y Prisma.
+- Variables `WORKER_ENABLED`, `NOTIFICATION_ATTEMPTS`, `NOTIFICATION_BACKOFF_MS` y `MAIL_ENABLED`.
+- Codigos `INVALID_STATE_TRANSITION` y `STATE_PRECONDITION_FAILED` (422), `TOURNAMENT_NOT_IN_PROGRESS` (409) y `QUEUE_UNAVAILABLE` (503).
+- Migracion de historial de estados y notificaciones: tablas `state_changes` y `notifications`, unico `(user_id, dedupe_key)`, indice parcial de no leidas y restricciones CHECK.
+- Pruebas de transiciones, concurrencia, reversion (fallo del encolado y del historial, incluido el efecto sobre la ronda), aislamiento por ambito de las siete rutas de estado y de las notificaciones, y cola BullMQ contra un Redis real.
+- El flujo de integracion continua suma un servicio Redis 7 y `TEST_REDIS_URL` para ejecutar la prueba de BullMQ real.
 - Ratings por sistema (FIDE, nacional y estatal) y ritmo (estandar, rapido y blitz) con historial de solo insercion: `GET` y `POST /jugadores/:id/ratings` (alias `/players/:id/ratings`). Lectura para cualquier usuario autenticado; el alta requiere el permiso `rating:update`.
 - El torneo declara el rating con el que se siembra y empareja: `ratingSystem` (FIDE por omision), `ratingPace` (STANDARD por omision) y `ratingStateCode`. Si falta el valor preferido se respalda en FIDE, nacional y estatal del mismo ritmo, y en ritmo estandar en la columna `ratingElo`.
 - Desempates puros en `domain/tiebreaks`: Buchholz, Buchholz corte 1, Buchholz mediano 1, Sonneborn-Berger, victorias, victorias con negras, enfrentamiento directo y puntaje progresivo, con orden configurable y posiciones compartidas (`rankStandings`).
@@ -12,6 +25,8 @@
 
 ### Cambiado
 - La generacion de rondas siembra con el rating configurado en el torneo en lugar de solo la columna `ratingElo`.
+- Generar una ronda exige el torneo en juego: con una ronda en curso o antes de iniciar responde 409 `TOURNAMENT_NOT_IN_PROGRESS`.
+- El script `pnpm smoke` evalua el entregable e3.1.
 
 ## [0.2.0-e2.2]
 

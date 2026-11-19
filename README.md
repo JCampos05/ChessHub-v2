@@ -27,6 +27,17 @@ Cache de lecturas (opcional):
 | `CACHE_TTL_SECONDS` | Vigencia de cada entrada, de 1 a 3600 | 60 |
 | `CACHE_LRU_CAPACITY` | Entradas del respaldo en memoria, de 10 a 100000 | 500 |
 
+Notificaciones de cambios de estado (opcional):
+
+| Variable | Descripcion | Por omision |
+|---|---|---|
+| `WORKER_ENABLED` | El servidor consume la cola de notificaciones; ponerla en `false` en replicas dedicadas a HTTP | `true` |
+| `NOTIFICATION_ATTEMPTS` | Intentos por trabajo, de 1 a 20 | 5 |
+| `NOTIFICATION_BACKOFF_MS` | Base de la espera exponencial entre intentos | 1000 |
+| `MAIL_ENABLED` | Envia correo ademas de la bandeja (`SMTP_*`; Mailpit en local) | `false` |
+
+Con `REDIS_URL` la cola vive en Redis (BullMQ); sin ella, en memoria del proceso.
+
 ```bash
 pnpm install
 docker compose up -d postgres redis mailpit
@@ -50,6 +61,7 @@ docker compose up -d --build api
 |---|---|
 | `pnpm dev` | Servidor con recarga |
 | `pnpm build` / `pnpm start` | Compila y ejecuta `dist/` |
+| `pnpm worker` / `pnpm worker:start` | Consumidor de notificaciones sin servidor HTTP (con `tsx` o desde `dist/`) |
 | `pnpm typecheck` | Verificacion de tipos |
 | `pnpm test` | Pruebas unitarias y de integracion |
 | `pnpm test:cov` | Pruebas con cobertura (umbral 70 %) |
@@ -71,20 +83,21 @@ La prueba de rendimiento (`tests/integration/read-performance.test.ts`) carga 50
 
 ### Integracion continua
 
-El flujo `.github/workflows/ci.yml` se ejecuta en cada push, etiqueta `v*` y pull request: levanta PostgreSQL 16, instala con `pnpm install --frozen-lockfile`, genera el cliente de Prisma y corre `pnpm typecheck`, `pnpm test:cov` (umbral global de 70 %) y `pnpm build`; ademas construye la imagen de Docker. Para reproducirlo en local basta con `pnpm typecheck && pnpm test:cov && pnpm build`.
+El flujo `.github/workflows/ci.yml` se ejecuta en cada push, etiqueta `v*` y pull request: levanta PostgreSQL 16 y Redis 7 (con `TEST_REDIS_URL` corre la prueba de la cola BullMQ real; sin esa variable se omite), instala con `pnpm install --frozen-lockfile`, genera el cliente de Prisma y corre `pnpm typecheck`, `pnpm test:cov` (umbral global de 70 %) y `pnpm build`; ademas construye la imagen de Docker. Para reproducirlo en local basta con `pnpm typecheck && pnpm test:cov && pnpm build`.
 
 ## Estructura
 
 ```
 src/
   config/        variables de entorno validadas
-  lib/           prisma, logger
+  lib/           prisma, logger, cache, redis, correo y cola de notificaciones
   shared/        errores, validacion, paginacion
   middlewares/   autenticacion, limite de peticiones, errores
   domain/        logica pura (coincidencia de nombres, edad, cache, permisos, emparejamiento suizo, desempates)
-  modules/       auth, users, players, categories, tournaments, registrations, rounds, pairings, games, health
+  modules/       auth, users, players, categories, tournaments, registrations, rounds, pairings, games, notifications, health
   app.ts         createApp()
   server.ts      arranque y cierre ordenado
+  worker.ts      consumidor de notificaciones independiente
 prisma/          esquema, migraciones y semilla
 tests/           unit e integration
 scripts/         pruebas de humo
@@ -134,6 +147,27 @@ Alias en ingles: `/tournaments/:id/registrations` y `/tournaments/:id/rounds/gen
 - **Generar ronda:** requiere al menos 2 inscripciones activas y que las partidas de la ronda anterior tengan resultado; la ronda anterior pasa a `FINISHED` y la nueva queda `IN_PROGRESS`, todo en una transaccion. Errores de conflicto: `NOT_ENOUGH_PLAYERS`, `PREVIOUS_ROUND_UNFINISHED`, `ROUNDS_COMPLETE`, `ROUND_DUPLICATE`, `NO_VALID_PAIRING`.
 - **Emparejamiento:** sistema suizo; ordena por puntaje, Buchholz, rating y folio; el jugador que queda solo en su grupo de puntaje baja al grupo mas cercano; nadie repite rival ni descansa dos veces; el balance de color se mantiene entre -2 y +2.
 - Los listados de inscripciones nunca incluyen telefono ni correo.
+
+### Estados del torneo y notificaciones
+
+Ciclo: `REGISTRATION_OPEN` (convocatoria) → `REGISTRATION_CLOSED` (inscripciones cerradas) → `IN_PROGRESS` (en juego) ⇄ `ROUND_IN_PROGRESS` (ronda en curso) → `FINISHED` (finalizado); `CANCELLED` (cancelado) es posible desde cualquier estado no final. Finalizado y cancelado no tienen salida.
+
+| Metodo y ruta | Permiso | Descripcion |
+|---|---|---|
+| `PATCH /api/v1/torneos/:id/estado` | `tournament:update` | Cambia el estado con `{ estado, motivo? }`; el estado puede ir como codigo, nombre en espanol o numero (1 a 6) |
+| `PATCH /api/v1/torneos/:id/convocatoria`, `/inscripciones_cerradas`, `/en_juego`, `/ronda_en_curso`, `/finalizado`, `/cancelado` | `tournament:update` | Lo mismo con el destino fijado por la ruta; solo `/cancelado` usa `motivo` |
+| `GET /api/v1/torneos/:id/historial-estados` | autenticado | Cambios de estado, del mas reciente al mas antiguo |
+| `GET /api/v1/notificaciones` | autenticado | Bandeja propia, paginada; filtro `leida=true\|false` |
+| `GET /api/v1/notificaciones/unread-count` | autenticado | `{ count }` de las no leidas |
+| `PATCH /api/v1/notificaciones/:id/leida` | autenticado | Marca una como leida (idempotente); una ajena responde 404 |
+| `PATCH /api/v1/notificaciones/leer-todas` | autenticado | Marca todas las propias; responde `{ updated }` |
+
+Alias en ingles: `/tournaments/:id/status`, `/status-history`, `/notifications`, `/:id/read` y `/read-all`.
+
+- **Transiciones:** se validan en el dominio y se aplican en una transaccion con el torneo bloqueado, junto con el historial y el encolado del aviso. Errores: 422 `INVALID_STATE_TRANSITION` (la transicion no existe) y 422 `STATE_PRECONDITION_FAILED` (faltan condiciones: al menos 2 inscritos para iniciar, ronda con mesas para ponerla en curso, partidas con resultado para cerrarla, rondas terminadas para finalizar). Un estado desconocido responde 400.
+- **Rondas:** `ronda_en_curso` inicia la ronda abierta y volver a `en_juego` la cierra. Generar una ronda exige el torneo en `IN_PROGRESS` (409 `TOURNAMENT_NOT_IN_PROGRESS` en caso contrario).
+- **Avisos:** el cambio genera un trabajo en la cola; un consumidor crea una notificacion para el creador del torneo y para quien tenga un rol con ambito de ese torneo. El proceso es idempotente: un reintento no duplica filas ni correos. Si la cola no acepta el trabajo, la transaccion se revierte y la API responde 503 `QUEUE_UNAVAILABLE`.
+- **Consumidor:** va integrado en el servidor (`WORKER_ENABLED=true`) o corre aparte con `pnpm worker`.
 
 ### Ratings por sistema y ritmo
 

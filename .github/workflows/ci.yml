@@ -41,9 +41,22 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      # La cola de notificaciones (BullMQ) se prueba contra un Redis real
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
       # Misma URL que usan las pruebas (tests/global-setup.ts y vitest.config.ts)
       DATABASE_URL: postgresql://chesshub:chesshub@localhost:5432/chesshub_test
+      # Distinta de REDIS_URL (que las pruebas dejan vacia): activa solo la prueba de BullMQ real
+      TEST_REDIS_URL: redis://localhost:6379
 
     steps:
       - name: Descargar el codigo
