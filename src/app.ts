@@ -13,6 +13,7 @@ import { categoryRouter } from './modules/categories/category.routes.js';
 import { rootInfo } from './modules/health/health.controller.js';
 import { gameRouter } from './modules/games/game.routes.js';
 import { healthRouter } from './modules/health/health.routes.js';
+import { notificationRouter } from './modules/notifications/notification.routes.js';
 import { pairingRouter } from './modules/pairings/pairing.routes.js';
 import { playerRouter } from './modules/players/player.routes.js';
 import { roundRouter } from './modules/rounds/round.routes.js';
@@ -52,6 +53,8 @@ export function createApp(): Express {
   app.use('/api/v1/pairings', pairingRouter);
   app.use('/api/v1/partidas', gameRouter);
   app.use('/api/v1/games', gameRouter);
+  app.use('/api/v1/notificaciones', notificationRouter);
+  app.use('/api/v1/notifications', notificationRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

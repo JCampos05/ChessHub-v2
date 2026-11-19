@@ -1,4 +1,5 @@
 import { env } from '../config/env.js';
+import { BullNotificationQueue } from './queue-bullmq.js';
 import { MemoryNotificationQueue } from './queue-memory.js';
 
 // Trabajo de notificación: el cambio de estado ya está guardado; el consumidor resuelve destinatarios y envía
@@ -26,10 +27,13 @@ export interface NotificationQueue {
 
 let queue: NotificationQueue | undefined;
 
-// Cola única del proceso. Sin REDIS_URL los trabajos viven en memoria (pruebas y desarrollo)
+// Cola única del proceso. Con REDIS_URL los trabajos viven en Redis (BullMQ); sin ella, en memoria (pruebas y desarrollo)
 export function getNotificationQueue(): NotificationQueue {
   if (queue) return queue;
-  queue = new MemoryNotificationQueue({ attempts: env.NOTIFICATION_ATTEMPTS, backoffMs: env.NOTIFICATION_BACKOFF_MS });
+  const options = { attempts: env.NOTIFICATION_ATTEMPTS, backoffMs: env.NOTIFICATION_BACKOFF_MS };
+  queue = env.REDIS_URL
+    ? new BullNotificationQueue({ ...options, redisUrl: env.REDIS_URL })
+    : new MemoryNotificationQueue(options);
   return queue;
 }
 
