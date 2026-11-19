@@ -1,5 +1,5 @@
 import { prisma } from './db.js';
-import { makePlayer, makeTournament } from './factories.js';
+import { makePlayer, makeRound, makeTournament } from './factories.js';
 
 let categorySeq = 0;
 
@@ -33,6 +33,33 @@ export async function enrollPlayers(tournamentId: string, categoryId: string, co
 // Pone el torneo en juego (la generación de rondas lo exige). Escribe con Prisma para no depender de la ruta de estados
 export function startTournament(tournamentId: string) {
   return prisma.tournament.update({ where: { id: tournamentId }, data: { status: 'IN_PROGRESS' } });
+}
+
+// Ronda 1 armada a mano con una sola mesa: sirve para probar transiciones sin pasar por el generador de pareos
+export async function makeManualRound(
+  tournamentId: string,
+  whitePlayerId: string,
+  blackPlayerId: string,
+  options: { status?: 'PENDING' | 'IN_PROGRESS' | 'FINISHED'; result?: 'PENDING' | 'WHITE_WINS' } = {},
+) {
+  const status = options.status ?? 'PENDING';
+  await makeRound(tournamentId, 1, {
+    status,
+    ...(status === 'PENDING' ? {} : { startedAt: new Date() }),
+    ...(status === 'FINISHED' ? { finishedAt: new Date() } : {}),
+  });
+  await prisma.pairing.create({
+    data: {
+      tournamentId,
+      roundNumber: 1,
+      board: 1,
+      whitePlayerId,
+      blackPlayerId,
+      game: {
+        create: { tournamentId, roundNumber: 1, whitePlayerId, blackPlayerId, result: options.result ?? 'PENDING' },
+      },
+    },
+  });
 }
 
 // Da resultado a todas las partidas pendientes de una ronda (blancas ganan)
